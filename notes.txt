@@ -1,0 +1,14 @@
+sysrepo
+=======
+
+* at first sysrepoctl run, segfault when sysrepo shared memory are already left
+  uninitialized into /dev/shm...
+  maybe the same problem happens when factory-default data directory is not
+  cleaned up before first run
+* sysrepoctl creates connection / lock files under $(REPO_PATH), i.e.,
+  /etc/sysrepo !!
+
+cli
+===
+
+https://github.com/okda-networks/onm-cli
