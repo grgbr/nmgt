@@ -3,6 +3,8 @@
 # * https://github.com/okda-networks/onm-cli
 # * https://github.com/sysrepo/sysrepo-gnxi
 #
+# apt install libc-ares-dev libjansson-dev libev-dev
+#
 OUTBASE         := $(CURDIR)/out
 DOWNDIR         := $(OUTBASE)/download
 STAMPDIR        := $(OUTBASE)/stamp
@@ -69,11 +71,27 @@ env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
     cmake --install '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))'
 endef
 
+define configure_cmd
+$(MKDIR) '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' && \
+cd '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' && \
+env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
+	'$(strip $(1))/configure' \
+		--prefix='$(STAGEDIR)' \
+		--srcdir '$(strip $(1))' \
+		INCLUDES='-I$(STAGEDIR)/include' \
+		LDFLAGS='$(EXTRA_LDFLAGS)' \
+		$(2) && \
+env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
+	make -C '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' && \
+env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
+	make -C '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' install
+endef
+
 .PHONY: all
 all: sample pyang onmcli
 
 .PHONY: sample
-sample: $(STAMPDIR)/sysrepo
+sample: $(STAMPDIR)/sysrepo $(STAMPDIR)/nghttp2
 	$(MAKE) --directory='$(@)' \
 		PREFIX='$(STAGEDIR)' \
 		BUILDDIR='$(BUILDDIR)/$(@)' \
@@ -177,6 +195,34 @@ $(SRCDIR)/libyang/: $(DOWNDIR)/$(LIBYANG_TARBALL_BASE) | $(SRCDIR)/
 $(DOWNDIR)/$(LIBYANG_TARBALL_BASE): | $(DOWNDIR)/
 	$(call fetch_cmd,$(@),$(LIBYANG_URI))
 
+NGHTTP2_URI          := https://github.com/nghttp2/nghttp2/releases/download/v1.69.0/nghttp2-1.69.0.tar.gz
+NGHTTP2_TARBALL_EXT  := $(shell echo '$(notdir $(NGHTTP2_URI))' | sed 's/v[0-9.]\+//')
+NGHTTP2_VERS         := $(patsubst v%.$(NGHTTP2_TARBALL_EXT),%,$(notdir $(NGHTTP2_URI)))
+NGHTTP2_TARBALL_BASE := nghttp2-$(NGHTTP2_VERS).$(NGHTTP2_TARBALL_EXT)
+.PHONY: nghttp2
+nghttp2: $(STAMPDIR)/nghttp2
+$(STAMPDIR)/nghttp2: $(STAMPDIR)/libevent | $(SRCDIR)/nghttp2/ $(STAMPDIR)/ $(BUILDDIR)/
+	$(call configure_cmd,$(firstword $(|)))
+	$(TOUCH) $(@)
+$(SRCDIR)/nghttp2/: $(DOWNDIR)/$(NGHTTP2_TARBALL_BASE) | $(SRCDIR)/
+	$(call untar_cmd,$(@),$(<))
+$(DOWNDIR)/$(NGHTTP2_TARBALL_BASE): | $(DOWNDIR)/
+	$(call fetch_cmd,$(@),$(NGHTTP2_URI))
+
+LIBEVENT_URI          := https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz
+LIBEVENT_TARBALL_EXT  := $(shell echo '$(notdir $(LIBEVENT_URI))' | sed 's/v[0-9.]\+//')
+LIBEVENT_VERS         := $(patsubst v%.$(LIBEVENT_TARBALL_EXT),%,$(notdir $(LIBEVENT_URI)))
+LIBEVENT_TARBALL_BASE := libevent-$(LIBEVENT_VERS).$(LIBEVENT_TARBALL_EXT)
+.PHONY: libevent
+libevent: $(STAMPDIR)/libevent
+$(STAMPDIR)/libevent: | $(SRCDIR)/libevent/ $(STAMPDIR)/ $(BUILDDIR)/
+	$(call configure_cmd,$(firstword $(|)))
+	$(TOUCH) $(@)
+$(SRCDIR)/libevent/: $(DOWNDIR)/$(LIBEVENT_TARBALL_BASE) | $(SRCDIR)/
+	$(call untar_cmd,$(@),$(<))
+$(DOWNDIR)/$(LIBEVENT_TARBALL_BASE): | $(DOWNDIR)/
+	$(call fetch_cmd,$(@),$(LIBEVENT_URI))
+
 .PHONY: dev
 dev:
 	$(CTAGS) -R $(SRCDIR)
@@ -195,5 +241,5 @@ clobber: clean
 #
 # Directory rules
 #
-$(DOWNDIR)/ $(STAMPDIR)/ $(SRCDIR)/ $(BUILDDIR)/:
+$(DOWNDIR)/ $(STAMPDIR)/ $(SRCDIR)/ $(BUILDDIR)/ $(BUILDDIR)/%/:
 	$(MKDIR) -p $(@)
