@@ -25,6 +25,7 @@ INSTALL         := install
 ID              := id
 CTAGS           := ctags
 CSCOPE          := cscope
+PYTHON3         := python3
 
 NPROC           := $(shell echo $$(($$(nproc) * 3 / 4)))
 CURUSER         := $(shell $(ID) --user --name)
@@ -65,6 +66,9 @@ env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
     cmake --install '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))'
 endef
 
+.PHONY: all
+all: sample pyang
+
 .PHONY: sample
 sample: $(STAMPDIR)/sysrepo
 	$(MAKE) --directory='$(@)' \
@@ -77,6 +81,24 @@ sample: $(STAMPDIR)/sysrepo
 		MKDIR='$(MKDIR)' \
 		INSTALL='$(INSTALL)' \
 		install
+
+#
+# Python Yang (requires a Python venv)
+#
+.PHONY: pyang
+pyang: $(STAMPDIR)/pyang
+$(STAMPDIR)/pyang: | $(STAMPDIR)/venv
+	$(STAGEDIR)/bin/pip3 install pyang
+	$(TOUCH) $(@)
+
+#
+# Python virtual environment.
+#
+.PHONY: venv
+venv: $(STAMPDIR)/venv
+$(STAMPDIR)/venv:
+	$(PYTHON3) -m venv $(STAGEDIR)
+	$(TOUCH) $(@)
 
 #
 # Sysrepo
@@ -100,7 +122,7 @@ $(STAMPDIR)/sysrepo: $(STAMPDIR)/libyang | $(SRCDIR)/sysrepo/ $(STAMPDIR)/ $(BUI
 	  -DFACTORY_DEFAULT_DATA_PATH='$(STAGEDIR)/var/lib/sysrepo/factory' \
 	  -DSTARTUP_DATA_PATH='$(STAGEDIR)/var/lib/sysrepo/startup' \
 	  -DNOTIFICATION_PATH='$(STAGEDIR)/var/lib/sysrepo/notif' \
-	  -DYANG_MODULE_PATH='$(STAGEDIR)/share/sysrepo/yang' \
+	  -DYANG_MODULE_PATH='$(STAGEDIR)/var/lib/sysrepo/yang' \
 	  \
 	  -DSYSREPO_UMASK='00077' \
 	  -DSYSREPO_GROUP='$(CURGROUP)' \

@@ -1,3 +1,18 @@
+IC required features
+====================
+
+* VPX slots startup configurations + configs common to all VPX slots (e.g., nacm
+  / user db)
+* cli commands generation
+* roussette / http2
+* yang deviation / extensions
+* modules install at build time cannot be done unless compiled-in as static
+  module within sysrepo. Seamless install might be performed at runtime with
+  module daemons using sr_install_module2() ?
+  See https://github.com/sysrepo/sysrepo/issues/3429
+      https://github.com/sysrepo/sysrepo/issues/3393
+* privileges managament / nacm
+
 sysrepo
 =======
 
