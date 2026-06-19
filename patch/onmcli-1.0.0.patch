@@ -1,0 +1,40 @@
+Binary files onmcli.orig/.Makefile.swp and onmcli/.Makefile.swp differ
+diff -urN onmcli.orig/src/commands/yang_core/data_factory.c onmcli/src/commands/yang_core/data_factory.c
+--- onmcli.orig/src/commands/yang_core/data_factory.c	2024-08-12 20:33:24.000000000 +0200
++++ onmcli/src/commands/yang_core/data_factory.c	2026-06-19 12:04:39.423317797 +0200
+@@ -252,8 +252,8 @@
+             new_leaf = get_sysrepo_candidate_node(all_xpath);
+             if (new_leaf == NULL) {
+                 item_found = 0;
+-                ret = lyd_new_path2(parent_data, sysrepo_ctx, xpath, value, strlen(value), LYD_ANYDATA_STRING,
+-                                    LYD_NEW_PATH_OUTPUT, NULL, &new_leaf);
++                ret = lyd_new_path2(parent_data, sysrepo_ctx, xpath, value, strlen(value), LYD_VALHINT_STRING,
++                                    LYD_NEW_VAL_OUTPUT, NULL, &new_leaf);
+             }
+ 
+ 
+diff -urN onmcli.orig/src/commands/yang_core/data_validators.c onmcli/src/commands/yang_core/data_validators.c
+--- onmcli.orig/src/commands/yang_core/data_validators.c	2024-08-12 20:33:24.000000000 +0200
++++ onmcli/src/commands/yang_core/data_validators.c	2026-06-19 12:09:35.850634580 +0200
+@@ -30,7 +30,7 @@
+ 
+ int validate_all(struct cli_def *cli, const char *word, const char *value, struct lysc_node_leaf *leaf) {
+     ly_err_clean(leaf->module->ctx, NULL);
+-    LY_ERR err = lyd_value_validate(leaf->module->ctx, (const struct lysc_node *) leaf, value,
++    LY_ERR err = lyd_value_validate((const struct lysc_node *) leaf, value,
+                                     strlen(value), NULL, NULL, NULL);
+     // LY_EINCOMPLETE returned by libyang for leafref as value is unresolved, it's not failed.
+     if (err == LY_SUCCESS || err == LY_EINCOMPLETE)
+diff -urN onmcli.orig/src/onm_logger.h onmcli/src/onm_logger.h
+--- onmcli.orig/src/onm_logger.h	2024-08-12 20:33:24.000000000 +0200
++++ onmcli/src/onm_logger.h	2026-06-19 12:14:46.775860575 +0200
+@@ -3,7 +3,9 @@
+ #ifndef ONMCLI_ONM_LOGGER_H
+ #define ONMCLI_ONM_LOGGER_H
+ 
++#ifndef LOGFILE_NAME
+ #define LOGFILE_NAME "/var/log/onmcli/onmcli.log"
++#endif
+ 
+ #include "config.h"
+ 

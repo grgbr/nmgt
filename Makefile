@@ -9,6 +9,7 @@ STAMPDIR        := $(OUTBASE)/stamp
 SRCDIR          := $(OUTBASE)/src
 BUILDDIR        := $(OUTBASE)/build
 STAGEDIR        := $(OUTBASE)/staging
+PATCHDIR        := $(CURDIR)/patch
 
 EXTRA_CFLAGS    := -g -O0
 EXTRA_LDFLAGS   := -Wl,-rpath,$(STAGEDIR)/lib
@@ -26,6 +27,8 @@ ID              := id
 CTAGS           := ctags
 CSCOPE          := cscope
 PYTHON3         := python3
+RSYNC           := rsync
+PATCH           := patch
 
 NPROC           := $(shell echo $$(($$(nproc) * 3 / 4)))
 CURUSER         := $(shell $(ID) --user --name)
@@ -67,7 +70,7 @@ env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
 endef
 
 .PHONY: all
-all: sample pyang
+all: sample pyang onmcli
 
 .PHONY: sample
 sample: $(STAMPDIR)/sysrepo
@@ -99,6 +102,30 @@ venv: $(STAMPDIR)/venv
 $(STAMPDIR)/venv:
 	$(PYTHON3) -m venv $(STAGEDIR)
 	$(TOUCH) $(@)
+
+#
+# onm-cli
+# Watch out ! Requires the libbsd-dev package to build !
+#
+ONMCLI_URI          := https://github.com/okda-networks/onm-cli/archive/refs/tags/v1.0.0.tar.gz
+ONMCLI_TARBALL_EXT  := $(shell echo '$(notdir $(ONMCLI_URI))' | sed 's/v[0-9.]\+//')
+ONMCLI_VERS         := $(patsubst v%.$(ONMCLI_TARBALL_EXT),%,$(notdir $(ONMCLI_URI)))
+ONMCLI_TARBALL_BASE := onmcli-$(ONMCLI_VERS).$(ONMCLI_TARBALL_EXT)
+onmcli: $(STAMPDIR)/onmcli
+$(STAMPDIR)/onmcli: $(STAMPDIR)/sysrepo | $(SRCDIR)/onmcli/ $(STAMPDIR)/ $(BUILDDIR)/
+	$(RSYNC) --archive --delete $(SRCDIR)/onmcli/ $(BUILDDIR)/onmcli
+	cd $(BUILDDIR)/onmcli && $(PATCH) -p1 < $(PATCHDIR)/onmcli-$(ONMCLI_VERS).patch
+	$(MAKE) --directory='$(BUILDDIR)/onmcli' \
+	        INSTALL_DIR='$(STAGEDIR)/bin' \
+	        LOG_DIR='$(STAGEDIR)/var/log/onmcli' \
+	        CFLAGS='$(CFLAGS) -I$(STAGEDIR)/include -Wall --vtv-debug -DLOGFILE_NAME=\"$(STAGEDIR)/var/log/onmcli/onmcli.log\"' \
+	        LIB_PATH='-L $(STAGEDIR)/lib $(EXTRA_LDFLAGS)' \
+	        install
+	$(TOUCH) $(@)
+$(SRCDIR)/onmcli/: $(DOWNDIR)/$(ONMCLI_TARBALL_BASE) | $(SRCDIR)/
+	$(call untar_cmd,$(@),$(<))
+$(DOWNDIR)/$(ONMCLI_TARBALL_BASE): | $(DOWNDIR)/
+	$(call fetch_cmd,$(@),$(ONMCLI_URI))
 
 #
 # Sysrepo
