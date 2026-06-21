@@ -45,7 +45,7 @@ endef
 # $1: pathname to output top-level directory
 # $2: pathname to archive file
 define untar_cmd
-$(MKDIR) '$(strip $(1))'
+$(MKDIR) '$(strip $(1))' && \
 $(TAR) --directory='$(strip $(1))' \
        --extract \
        --strip-components=1 \
@@ -72,23 +72,20 @@ env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
 endef
 
 define configure_cmd
-$(MKDIR) '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' && \
+$(MKDIR) --parents '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' && \
 cd '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' && \
-env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
-	'$(strip $(1))/configure' \
-		--prefix='$(STAGEDIR)' \
-		--srcdir '$(strip $(1))' \
-		INCLUDES='-I$(STAGEDIR)/include' \
-		LDFLAGS='$(EXTRA_LDFLAGS)' \
-		$(2) && \
-env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
-	make -C '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' && \
-env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
-	make -C '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' install
+'$(strip $(1))/configure' --prefix='$(STAGEDIR)' \
+                          --srcdir '$(strip $(1))' \
+                          INCLUDES='-I$(STAGEDIR)/include' \
+                          LDFLAGS='$(EXTRA_LDFLAGS)' \
+                          PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
+                          $(2) && \
+make --directory='$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' && \
+make --directory='$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' install
 endef
 
 .PHONY: all
-all: sample pyang onmcli
+all: sample pyang onmcli nghttp2
 
 .PHONY: sample
 sample: $(STAMPDIR)/sysrepo $(STAMPDIR)/nghttp2
@@ -181,6 +178,9 @@ $(SRCDIR)/sysrepo/: $(DOWNDIR)/$(SYSREPO_TARBALL_BASE) | $(SRCDIR)/
 $(DOWNDIR)/$(SYSREPO_TARBALL_BASE): | $(DOWNDIR)/
 	$(call fetch_cmd,$(@),$(SYSREPO_URI))
 
+#
+# Libyang
+#
 LIBYANG_URI          := https://github.com/CESNET/libyang/archive/refs/tags/v5.4.9.tar.gz
 LIBYANG_TARBALL_EXT  := $(shell echo '$(notdir $(LIBYANG_URI))' | sed 's/v[0-9.]\+//')
 LIBYANG_VERS         := $(patsubst v%.$(LIBYANG_TARBALL_EXT),%,$(notdir $(LIBYANG_URI)))
@@ -195,6 +195,9 @@ $(SRCDIR)/libyang/: $(DOWNDIR)/$(LIBYANG_TARBALL_BASE) | $(SRCDIR)/
 $(DOWNDIR)/$(LIBYANG_TARBALL_BASE): | $(DOWNDIR)/
 	$(call fetch_cmd,$(@),$(LIBYANG_URI))
 
+#
+# Nghttp2
+#
 NGHTTP2_URI          := https://github.com/nghttp2/nghttp2/releases/download/v1.69.0/nghttp2-1.69.0.tar.gz
 NGHTTP2_TARBALL_EXT  := $(shell echo '$(notdir $(NGHTTP2_URI))' | sed 's/v[0-9.]\+//')
 NGHTTP2_VERS         := $(patsubst v%.$(NGHTTP2_TARBALL_EXT),%,$(notdir $(NGHTTP2_URI)))
@@ -209,6 +212,9 @@ $(SRCDIR)/nghttp2/: $(DOWNDIR)/$(NGHTTP2_TARBALL_BASE) | $(SRCDIR)/
 $(DOWNDIR)/$(NGHTTP2_TARBALL_BASE): | $(DOWNDIR)/
 	$(call fetch_cmd,$(@),$(NGHTTP2_URI))
 
+#
+# Libevent
+#
 LIBEVENT_URI          := https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz
 LIBEVENT_TARBALL_EXT  := $(shell echo '$(notdir $(LIBEVENT_URI))' | sed 's/v[0-9.]\+//')
 LIBEVENT_VERS         := $(patsubst v%.$(LIBEVENT_TARBALL_EXT),%,$(notdir $(LIBEVENT_URI)))
@@ -241,5 +247,5 @@ clobber: clean
 #
 # Directory rules
 #
-$(DOWNDIR)/ $(STAMPDIR)/ $(SRCDIR)/ $(BUILDDIR)/ $(BUILDDIR)/%/:
-	$(MKDIR) -p $(@)
+$(DOWNDIR)/ $(STAMPDIR)/ $(SRCDIR)/ $(BUILDDIR)/:
+	$(MKDIR) --parents $(@)
