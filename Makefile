@@ -199,8 +199,8 @@ $(DOWNDIR)/$(LIBYANG_TARBALL_BASE): | $(DOWNDIR)/
 # Nghttp2
 #
 NGHTTP2_URI          := https://github.com/nghttp2/nghttp2/releases/download/v1.69.0/nghttp2-1.69.0.tar.gz
-NGHTTP2_TARBALL_EXT  := $(shell echo '$(notdir $(NGHTTP2_URI))' | sed 's/v[0-9.]\+//')
-NGHTTP2_VERS         := $(patsubst v%.$(NGHTTP2_TARBALL_EXT),%,$(notdir $(NGHTTP2_URI)))
+NGHTTP2_TARBALL_EXT  := $(shell echo '$(notdir $(NGHTTP2_URI))' | sed 's/nghttp2-[0-9.]\+\.//')
+NGHTTP2_VERS         := $(patsubst nghttp2-%.$(NGHTTP2_TARBALL_EXT),%,$(notdir $(NGHTTP2_URI)))
 NGHTTP2_TARBALL_BASE := nghttp2-$(NGHTTP2_VERS).$(NGHTTP2_TARBALL_EXT)
 .PHONY: nghttp2
 nghttp2: $(STAMPDIR)/nghttp2
@@ -216,8 +216,8 @@ $(DOWNDIR)/$(NGHTTP2_TARBALL_BASE): | $(DOWNDIR)/
 # Libevent
 #
 LIBEVENT_URI          := https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz
-LIBEVENT_TARBALL_EXT  := $(shell echo '$(notdir $(LIBEVENT_URI))' | sed 's/v[0-9.]\+//')
-LIBEVENT_VERS         := $(patsubst v%.$(LIBEVENT_TARBALL_EXT),%,$(notdir $(LIBEVENT_URI)))
+LIBEVENT_TARBALL_EXT  := $(shell echo '$(notdir $(LIBEVENT_URI))' | sed 's/libevent-[0-9.]\+-stable\.//')
+LIBEVENT_VERS         := $(patsubst libevent-%-stable.$(LIBEVENT_TARBALL_EXT),%,$(notdir $(LIBEVENT_URI)))
 LIBEVENT_TARBALL_BASE := libevent-$(LIBEVENT_VERS).$(LIBEVENT_TARBALL_EXT)
 .PHONY: libevent
 libevent: $(STAMPDIR)/libevent
