@@ -37,4 +37,22 @@ diff -urN onmcli.orig/src/onm_logger.h onmcli/src/onm_logger.h
 +#endif
  
  #include "config.h"
+
+diff -urN onmcli.orig/Makefile onmcli/Makefile
+--- onmcli.orig/Makefile	2024-08-12 20:33:24.000000000 +0200
++++ onmcli/src/Makefile	2026-06-19 12:09:35.850634580 +0200
+@@ -62,12 +62,12 @@
+ install: $(EXEC)
+ 	# Create the log directory and set permissions
+ 	install -d $(LOG_DIR)
+-	chown $(USER):$(USER) $(LOG_DIR)
++	chown $(USER):$$(id -gn $(USER)) $(LOG_DIR)
+ 	chmod 755 $(LOG_DIR)
  
+ 	# Create the log file and set permissions
+ 	touch $(LOG_DIR)/onmcli.log
+-	chown $(USER):$(USER) $(LOG_DIR)/onmcli.log
++	chown $(USER):$$(id -gn $(USER)) $(LOG_DIR)/onmcli.log
+ 	chmod 666 $(LOG_DIR)/onmcli.log
+ 
+ 	# Copy the binary to /usr/local/bin
