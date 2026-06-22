@@ -133,7 +133,7 @@ $(STAMPDIR)/onmcli: $(STAMPDIR)/sysrepo | $(SRCDIR)/onmcli/ $(STAMPDIR)/ $(BUILD
 	$(MAKE) --directory='$(BUILDDIR)/onmcli' \
 	        INSTALL_DIR='$(STAGEDIR)/bin' \
 	        LOG_DIR='$(STAGEDIR)/var/log/onmcli' \
-	        CFLAGS='$(CFLAGS) -I$(STAGEDIR)/include -Wall --vtv-debug -DLOGFILE_NAME=\"$(STAGEDIR)/var/log/onmcli/onmcli.log\"' \
+	        CFLAGS='$(EXTRA_CFLAGS) -I$(STAGEDIR)/include -Wall --vtv-debug -DLOGFILE_NAME=\"$(STAGEDIR)/var/log/onmcli/onmcli.log\"' \
 	        LIB_PATH='-L $(STAGEDIR)/lib $(EXTRA_LDFLAGS)' \
 	        install
 	$(TOUCH) $(@)
@@ -231,8 +231,8 @@ $(DOWNDIR)/$(LIBEVENT_TARBALL_BASE): | $(DOWNDIR)/
 
 .PHONY: dev
 dev:
-	$(CTAGS) -R $(SRCDIR)
-	$(CSCOPE) -bqR -s$(SRCDIR)
+	$(CTAGS) -f $(OUTBASE)/tags -R $(SRCDIR)
+	cd $(SRCDIR) && $(CSCOPE) -f$(OUTBASE)/cscope.out -bqR
 
 .PHONY: clean
 clean:

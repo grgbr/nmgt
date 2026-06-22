@@ -14,7 +14,7 @@ $(MAKE) --directory='$(strip $(1))' \
         $(2)
 endef
 
-subdirs := oven restconf
+subdirs := oven restconf cli
 
 .PHONY: all
 all: build

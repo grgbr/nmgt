@@ -26,4 +26,6 @@ sysrepo
 cli
 ===
 
-https://github.com/okda-networks/onm-cli
+* cmd and args validation with proper user error messages
+* https://github.com/okda-networks/onm-cli
+* klish
