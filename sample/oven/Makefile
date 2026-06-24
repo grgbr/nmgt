@@ -36,3 +36,9 @@ $(BUILDDIR)/oven-wait: wait.c | $(BUILDDIR)/
 
 $(BUILDDIR)/:
 	$(MKDIR) -p $(@)
+
+.PHONY: dist
+dist:
+
+.PHONY: distclean
+distclean:

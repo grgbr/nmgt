@@ -1,20 +1,6 @@
-# $1: pathname to source directory
-# $2: arbitrary make arguments
-define make_cmd
-$(MAKE) --directory='$(strip $(1))' \
-        DESTDIR='$(DESTDIR)' \
-        PREFIX='$(PREFIX)' \
-        BUILDDIR='$(BUILDDIR)/$(strip $(1))' \
-        PKG_CONFIG='$(PKG_CONFIG)' \
-        PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
-        EXTRA_CFLAGS='$(EXTRA_CFLAGS)' \
-        EXTRA_LDFLAGS='$(EXTRA_LDFLAGS)' \
-        MKDIR='$(MKDIR)' \
-        INSTALL='$(INSTALL)' \
-        $(2)
-endef
+include ../utils.mk
 
-subdirs := oven restconf cli
+subdirs := oven restconf cli ntp
 
 .PHONY: all
 all: build
@@ -32,3 +18,13 @@ install: $(addprefix install-,$(subdirs))
 .PHONY: $(addprefix install-,$(subdirs))
 $(addprefix install-,$(subdirs)):
 	$(call make_cmd,$(subst install-,,$(@)),install)
+
+.PHONY: dist
+dist: $(addprefix dist-,$(subdirs))
+$(addprefix dist-,$(subdirs)):
+	$(call make_cmd,$(subst dist-,,$(@)),dist)
+
+.PHONY: distclean
+distclean: $(addprefix distclean-,$(subdirs))
+$(addprefix distclean-,$(subdirs)):
+	$(call make_cmd,$(subst distclean-,,$(@)),distclean)

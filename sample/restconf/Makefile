@@ -31,3 +31,9 @@ $(BUILDDIR)/restconfd: restconfd.c | $(BUILDDIR)/
 
 $(BUILDDIR)/:
 	$(MKDIR) -p $(@)
+
+.PHONY: dist
+dist:
+
+.PHONY: distclean
+distclean:

@@ -36,69 +36,14 @@ NPROC           := $(shell echo $$(($$(nproc) * 3 / 4)))
 CURUSER         := $(shell $(ID) --user --name)
 CURGROUP        := $(shell $(ID) --group --name)
 
-# $1: pathname to output file
-# $2: upstream URI
-define fetch_cmd
-	$(CURL) --location --output '$(strip $(1))' '$(strip $(2))'
-endef
-
-# $1: pathname to output top-level directory
-# $2: pathname to archive file
-define untar_cmd
-$(MKDIR) '$(strip $(1))' && \
-$(TAR) --directory='$(strip $(1))' \
-       --extract \
-       --strip-components=1 \
-       --file='$(strip $(2))'
-endef
-
-# $1: pathname to source directory
-# $2: arbitrary cmake options
-define cmake_cmd
-env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
-    cmake -S '$(strip $(1))' \
-          -B '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' \
-          -DCMAKE_BUILD_TYPE='Debug' \
-          -DCMAKE_EXE_LINKER_FLAGS='$(EXTRA_LDFLAGS)' \
-          -DCMAKE_MODULE_LINKER_FLAGS='$(EXTRA_LDFLAGS)' \
-          -DCMAKE_SHARED_LINKER_FLAGS='$(EXTRA_LDFLAGS)' \
-          -DCMAKE_INSTALL_PREFIX='$(STAGEDIR)' \
-          $(2) && \
-env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
-    cmake --build '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' \
-          --parallel $(NPROC) && \
-env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
-    cmake --install '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))'
-endef
-
-define configure_cmd
-$(MKDIR) --parents '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' && \
-cd '$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' && \
-'$(strip $(1))/configure' --prefix='$(STAGEDIR)' \
-                          --srcdir '$(strip $(1))' \
-                          INCLUDES='-I$(STAGEDIR)/include' \
-                          LDFLAGS='$(EXTRA_LDFLAGS)' \
-                          PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
-                          $(2) && \
-make --directory='$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' && \
-make --directory='$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' install
-endef
+include utils.mk
 
 .PHONY: all
 all: sample pyang onmcli nghttp2
 
 .PHONY: sample
 sample: $(STAMPDIR)/sysrepo $(STAMPDIR)/nghttp2
-	$(MAKE) --directory='$(@)' \
-		PREFIX='$(STAGEDIR)' \
-		BUILDDIR='$(BUILDDIR)/$(@)' \
-		PKG_CONFIG='$(PKG_CONFIG)' \
-		PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
-		EXTRA_CFLAGS='$(EXTRA_CFLAGS)' \
-		EXTRA_LDFLAGS='$(EXTRA_LDFLAGS)' \
-		MKDIR='$(MKDIR)' \
-		INSTALL='$(INSTALL)' \
-		install
+	$(call make_cmd,$(@),PREFIX='$(STAGEDIR)' install)
 
 #
 # Python Yang (requires a Python venv)
@@ -170,8 +115,8 @@ $(STAMPDIR)/sysrepo: $(STAMPDIR)/libyang | $(SRCDIR)/sysrepo/ $(STAMPDIR)/ $(BUI
 	  -DSYSREPO_GROUP='$(CURGROUP)' \
 	  -DNACM_RECOVERY_USER='$(CURUSER)')
 	$(MKDIR) --parents --mode=755 '$(STAGEDIR)/var/lib'
-	$(MKDIR) --mode=700 '$(STAGEDIR)/var/lib/sysrepo'
-	$(MKDIR) --mode=700 '$(STAGEDIR)/var/lib/sysrepo/factory'
+	$(MKDIR) --parents --mode=700 '$(STAGEDIR)/var/lib/sysrepo'
+	$(MKDIR) --parents --mode=700 '$(STAGEDIR)/var/lib/sysrepo/factory'
 	$(TOUCH) $(@)
 $(SRCDIR)/sysrepo/: $(DOWNDIR)/$(SYSREPO_TARBALL_BASE) | $(SRCDIR)/
 	$(call untar_cmd,$(@),$(<))
@@ -243,6 +188,16 @@ clean:
 .PHONY: clobber
 clobber: clean
 	$(RM) -r $(OUTBASE)
+	
+.PHONY: dist dist-sample
+dist: dist-sample
+dist-sample:
+	$(call make_cmd,$(patsubst dist-%,%,$(@)),dist)
+
+.PHONY: distclean distclean-sample
+distclean: clobber distclean-sample
+distclean-sample:
+	$(call make_cmd,$(patsubst distclean-%,%,$(@)),distclean)
 
 #
 # Directory rules

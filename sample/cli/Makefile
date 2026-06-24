@@ -1,4 +1,5 @@
-CFLAGS  := $(shell env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
+CFLAGS  := -Wall \
+           $(shell env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
                        $(PKG_CONFIG) --cflags sysrepo libyang) \
            $(EXTRA_CFLAGS)
 LDFLAGS := $(shell env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
@@ -20,3 +21,9 @@ $(BUILDDIR)/nmgmt-schema: schema.c | $(BUILDDIR)/
 
 $(BUILDDIR)/:
 	$(MKDIR) -p $(@)
+
+.PHONY: dist
+dist:
+
+.PHONY: distclean
+distclean:
