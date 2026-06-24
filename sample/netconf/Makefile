@@ -14,7 +14,8 @@ all: build
 
 .PHONY: install
 install: $(DESTDIR)$(PREFIX)/sbin/netconf-server
-$(DESTDIR)$(PREFIX)/sbin/netconf-server: netconf-server.sh ietf-netconf-server-deviations.yang
+$(DESTDIR)$(PREFIX)/sbin/netconf-server: netconf-server.sh \
+                                         ietf-netconf-server-deviations.yang
 	$(PREFIX)/sbin/sysrepoctl -i ietf-netconf-server-deviations.yang -v3
 	sed 's;@@__PREFIX__@@;$(PREFIX);' $(<) > $(@)
 	chmod 755 $(@)
@@ -22,3 +23,8 @@ $(DESTDIR)$(PREFIX)/sbin/netconf-server: netconf-server.sh ietf-netconf-server-d
 .PHONY: build
 build:
 
+.PHONY: dist
+dist:
+
+.PHONY: distclean
+distclean:

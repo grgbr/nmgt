@@ -5,6 +5,7 @@ module oven {
         description "Initial revision.";
     }
     typedef oven-temperature {
+	units "°C";
         description "Temperature range that is accepted by the oven.";
         type uint8 {
             range "0..250";
@@ -13,7 +14,8 @@ module oven {
     container oven {
         description "Configuration container of the oven.";
         leaf turned-on {
-            description "Main switch determining whether the oven is on or off.";
+            description "Main switch determining whether the oven is on or off.
+                         newline test.";
             type boolean;
             default false;
         }
