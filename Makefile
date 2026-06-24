@@ -85,10 +85,10 @@ make --directory='$(BUILDDIR)/$(notdir $(patsubst %/,%,$(strip $(1))))' install
 endef
 
 .PHONY: all
-all: sample pyang onmcli nghttp2
+all: sample pyang onmcli nghttp2 netopeer2
 
 .PHONY: sample
-sample: $(STAMPDIR)/sysrepo $(STAMPDIR)/nghttp2
+sample: $(STAMPDIR)/sysrepo $(STAMPDIR)/nghttp2 $(STAMPDIR)/netopeer2
 	$(MAKE) --directory='$(@)' \
 		PREFIX='$(STAGEDIR)' \
 		BUILDDIR='$(BUILDDIR)/$(@)' \
@@ -229,6 +229,63 @@ $(SRCDIR)/libevent/: $(DOWNDIR)/$(LIBEVENT_TARBALL_BASE) | $(SRCDIR)/
 $(DOWNDIR)/$(LIBEVENT_TARBALL_BASE): | $(DOWNDIR)/
 	$(call fetch_cmd,$(@),$(LIBEVENT_URI))
 
+#
+# libssl
+#
+LIBSSL_URI          := https://www.libssh.org/files/0.10/libssh-0.10.6.tar.xz
+LIBSSL_TARBALL_EXT  := $(shell echo '$(notdir $(LIBSSL_URI))' | sed 's/libssh-[0-9.]\+\.//')
+LIBSSL_VERS         := $(patsubst libssh-%.$(LIBSSL_TARBALL_EXT),%,$(notdir $(LIBSSL_URI)))
+LIBSSL_TARBALL_BASE := libssh-$(LIBSSL_VERS).$(LIBSSL_TARBALL_EXT)
+.PHONY: libssh
+libssh: $(STAMPDIR)/libssh
+$(STAMPDIR)/libssh: $(STAMPDIR)/libyang | $(SRCDIR)/libssh/ $(STAMPDIR)/ $(BUILDDIR)/
+	$(call cmake_cmd,$(firstword $(|)))
+	$(TOUCH) $(@)
+$(SRCDIR)/libssh/: $(DOWNDIR)/$(LIBSSL_TARBALL_BASE) | $(SRCDIR)/
+	$(call untar_cmd,$(@),$(<))
+$(DOWNDIR)/$(LIBSSL_TARBALL_BASE): | $(DOWNDIR)/
+	$(call fetch_cmd,$(@),$(LIBSSL_URI))
+
+#
+# libnetconf2
+#
+LIBNETCONF2_URI          := https://github.com/CESNET/libnetconf2/archive/refs/tags/v4.2.14.tar.gz
+LIBNETCONF2_TARBALL_EXT  := $(shell echo '$(notdir $(LIBNETCONF2_URI))' | sed 's/v[0-9.]\+//')
+LIBNETCONF2_VERS         := $(patsubst v%.$(LIBNETCONF2_TARBALL_EXT),%,$(notdir $(LIBNETCONF2_URI)))
+LIBNETCONF2_TARBALL_BASE := libnetconf2-$(LIBNETCONF2_VERS).$(LIBNETCONF2_TARBALL_EXT)
+.PHONY: libnetconf2
+libnetconf2: $(STAMPDIR)/libnetconf2
+$(STAMPDIR)/libnetconf2: $(STAMPDIR)/libyang $(STAMPDIR)/libssh | $(SRCDIR)/libnetconf2/ $(STAMPDIR)/ $(BUILDDIR)/
+	$(call cmake_cmd,$(firstword $(|)))
+	$(TOUCH) $(@)
+$(SRCDIR)/libnetconf2/: $(DOWNDIR)/$(LIBNETCONF2_TARBALL_BASE) | $(SRCDIR)/
+	$(call untar_cmd,$(@),$(<))
+$(DOWNDIR)/$(LIBNETCONF2_TARBALL_BASE): | $(DOWNDIR)/
+	$(call fetch_cmd,$(@),$(LIBNETCONF2_URI))
+
+#
+# netopeer2
+#
+NETTOPEER2_URI          := https://github.com/CESNET/netopeer2/archive/refs/tags/v2.8.2.tar.gz
+NETTOPEER2_TARBALL_EXT  := $(shell echo '$(notdir $(NETTOPEER2_URI))' | sed 's/v[0-9.]\+//')
+NETTOPEER2_VERS         := $(patsubst v%.$(NETTOPEER2_TARBALL_EXT),%,$(notdir $(NETTOPEER2_URI)))
+NETTOPEER2_TARBALL_BASE := netopeer2-$(NETTOPEER2_VERS).$(NETTOPEER2_TARBALL_EXT)
+.PHONY: netopeer2
+netopeer2: $(STAMPDIR)/netopeer2
+$(STAMPDIR)/netopeer2: $(STAMPDIR)/sysrepo $(STAMPDIR)/libnetconf2 | $(SRCDIR)/netopeer2/ $(STAMPDIR)/ $(BUILDDIR)/
+	$(call cmake_cmd,$(firstword $(|)), \
+		-DENABLE_TESTS=false \
+		-DPIDFILE_PREFIX="$(STAGEDIR)/var/run" \
+		-DSERVER_DIR="$(STAGEDIR)/var/lib/netopeer2")
+	$(MKDIR) --parents --mode=755 '$(STAGEDIR)/var/run'
+	$(MKDIR) --parents --mode=755 '$(STAGEDIR)/var/lib'
+	$(MKDIR) --mode=700 '$(STAGEDIR)/var/lib/netopeer2'
+	$(TOUCH) $(@)
+$(SRCDIR)/netopeer2/: $(DOWNDIR)/$(NETTOPEER2_TARBALL_BASE) | $(SRCDIR)/
+	$(call untar_cmd,$(@),$(<))
+$(DOWNDIR)/$(NETTOPEER2_TARBALL_BASE): | $(DOWNDIR)/
+	$(call fetch_cmd,$(@),$(NETTOPEER2_URI))
+
 .PHONY: dev
 dev:
 	$(CTAGS) -f $(OUTBASE)/tags -R $(SRCDIR)
@@ -243,6 +300,10 @@ clean:
 .PHONY: clobber
 clobber: clean
 	$(RM) -r $(OUTBASE)
+
+.PHONY: clean-shm
+clean-shm: clean
+	$(RM) -f /dev/shm/*
 
 #
 # Directory rules

@@ -1,0 +1,17 @@
+module ietf-netconf-server-deviations {
+	yang-version 1.1;
+	namespace "ietf-netconf-server-deviations";
+	prefix netconf-server-dev;
+
+	import ietf-netconf-server {
+		prefix ins;
+	}
+
+	deviation "/ins:netconf-server/ins:listen/ins:endpoints/ins:endpoint/" +
+	          "ins:transport/ins:ssh/ins:ssh/ins:tcp-server-parameters/" +
+	          "ins:local-bind/ins:local-port" {
+		deviate replace {
+			default "1830";
+		}
+	}
+}
