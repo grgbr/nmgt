@@ -5,7 +5,7 @@ module oven {
         description "Initial revision.";
     }
     typedef oven-temperature {
-	units "°C";
+	units "degree Celsius";
         description "Temperature range that is accepted by the oven.";
         type uint8 {
             range "0..250";

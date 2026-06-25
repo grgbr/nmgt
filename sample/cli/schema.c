@@ -3,6 +3,59 @@
 #include <sysrepo.h>
 #include <assert.h>
 
+static const char *
+clily_basetype_str(LY_DATA_TYPE basetype)
+{
+	switch (basetype) {
+	case LY_TYPE_BINARY:
+		return "binary";
+	case LY_TYPE_UINT8:
+		return "8-bits unsigned integer";
+	case LY_TYPE_UINT16:
+		return "16-bits unsigned integer";
+	case LY_TYPE_UINT32:
+		return "32-bits unsigned integer";
+	case LY_TYPE_UINT64:
+		return "64-bits unsigned integer";
+	case LY_TYPE_STRING:
+		return "string";
+	case LY_TYPE_BITS:
+		return "bits";
+	case LY_TYPE_BOOL:
+		return "boolean";
+	case LY_TYPE_DEC64:
+		return "64-bits decimal floating-point integer";
+	case LY_TYPE_EMPTY:
+		return "empty";
+	case LY_TYPE_ENUM:
+		return "enumeration";
+	case LY_TYPE_IDENT:
+		return "identityref";
+	case LY_TYPE_INST:
+		return "instance-identifier";
+	case LY_TYPE_LEAFREF:
+		return "leafref";
+	case LY_TYPE_UNION:
+		return "union";
+	case LY_TYPE_INT8:
+		return "8-bits signed integer";
+	case LY_TYPE_INT16:
+		return "16-bits signed integer";
+	case LY_TYPE_INT32:
+		return "32-bits signed integer";
+	case LY_TYPE_INT64:
+		return "64-bits signed integer";
+	default:
+		return "unknown";
+	}
+}
+
+static const char *
+clily_lysc_type_str(const struct lysc_type * type)
+{
+	return clily_basetype_str(type->basetype);
+}
+
 LY_ERR
 clily_lysc_tree_dfs(const struct lysc_node * root,
                     lysc_dfs_clb             process_node,
@@ -298,7 +351,6 @@ cli_build_bin_leaf_help(const struct lysc_node_leaf * leaf)
 	int                          dlen;
 	const char *                 desc;
 	int                          ilen;
-	const char *                 units;
 	const char *                 dflt;
 	char *                       help;
 
@@ -312,20 +364,17 @@ cli_build_bin_leaf_help(const struct lysc_node_leaf * leaf)
 		rng = NULL;
 	cli_help_briefn_desc(leaf->dsc, &brief, &blen, &desc, &dlen);
 	ilen = strlen(leaf->name) + sizeof(" -- ") - 1;
-	units = cli_leaf_units_str(leaf);
 	dflt = cli_value_str(&leaf->dflt);
 	if (dlen) {
 		if (asprintf(&help,
 		             "%s -- %*.*s\n"
 		             "%*stype:    %s\n"
 		             "%*ssize:    %s\n"
-		             "%*sunits:   %s\n"
 		             "%*sdefault: %s\n"
 		             "%*s%*.*s\n",
 		             leaf->name, blen, blen, brief,
-		             ilen, "", "binary",
+		             ilen, "", clily_basetype_str(LY_TYPE_BINARY),
 		             ilen, "", rng ? rng : "none",
-		             ilen, "", units,
 		             ilen, "", dflt,
 		             ilen, "", dlen, dlen, desc) < 0)
 			help = NULL;
@@ -335,12 +384,10 @@ cli_build_bin_leaf_help(const struct lysc_node_leaf * leaf)
 		             "%s -- %*.*s\n"
 		             "%*stype:    %s\n"
 		             "%*ssize:    %s\n"
-		             "%*sunits:   %s\n"
 		             "%*sdefault: %s\n",
 		             leaf->name, blen, blen, brief,
-		             ilen, "", "binary",
+		             ilen, "", clily_basetype_str(LY_TYPE_BINARY),
 		             ilen, "", rng ? rng : "none",
-		             ilen, "", units,
 		             ilen, "", dflt) < 0)
 			help = NULL;
 	}
@@ -350,63 +397,154 @@ cli_build_bin_leaf_help(const struct lysc_node_leaf * leaf)
 	return help;
 }
 
-static const char *
-cli_uint_type_str(LY_DATA_TYPE basetype)
+static char *
+cli_build_patterns_help(const struct lysc_pattern * const * patterns)
 {
-	switch (basetype) {
-	case LY_TYPE_UINT8:
-		return "8-bits unsigned integer";
-	case LY_TYPE_UINT16:
-		return "16-bits unsigned integer";
-	case LY_TYPE_UINT32:
-		return "32-bits unsigned integer";
-	case LY_TYPE_UINT64:
-		return "64-bits unsigned integer";
-	default:
-		assert(0);
-	}
-}
+	assert(patterns);
 
-static const char *
-cli_sint_type_str(LY_DATA_TYPE basetype)
-{
-	switch (basetype) {
-	case LY_TYPE_INT8:
-		return "8-bits signed integer";
-	case LY_TYPE_INT16:
-		return "16-bits signed integer";
-	case LY_TYPE_INT32:
-		return "32-bits signed integer";
-	case LY_TYPE_INT64:
-		return "64-bits signed integer";
-	case LY_TYPE_DEC64:
-		return "64-bits decimal floating-point integer";
-	default:
-		assert(0);
-	}
-}
+	LY_ARRAY_COUNT_TYPE nr = LY_ARRAY_COUNT(patterns);
+	LY_ARRAY_COUNT_TYPE p;
+	size_t              plens[nr];
+	size_t              slen = 0;
+	char *              str;
 
-typedef const char * cli_basetype_str_fn(LY_DATA_TYPE);
+	for (p = 0; p < nr; p++) {
+		plens[p] = strlen(patterns[p]->expr);
+		slen += plens[p];
+	}
+
+	str = malloc(slen +           /* length of all pattern strings */
+	             (nr * 2) +       /* + 2 single quotes per pattern */
+	             ((nr - 1) * 3) + /* + " && " between and'ed patterns */
+	             1);              /* + terminating NULL byte. */
+	if (!str)
+		return NULL;
+
+	slen = 0;
+	str[slen++] = '\'';
+	memcpy(&str[slen], patterns[0]->expr, plens[0]);
+	slen += plens[0];
+	str[slen++] = '\'';
+	for (p = 1; p < nr; p++) {
+		str[slen++] = ' ';
+		str[slen++] = '&';
+		str[slen++] = '&';
+		str[slen++] = ' ';
+		str[slen++] = '\'';
+		memcpy(&str[slen], patterns[p]->expr, plens[p]);
+		slen += plens[p];
+		str[slen++] = '\'';
+	}
+	str[slen] = '\0';
+
+	return str;
+}
 
 static char *
-cli_build_num_leaf_help(const struct lysc_node_leaf * leaf,
-                        cli_fill_range_part_help_fn * fill_range,
-                        cli_basetype_str_fn *         type_string)
+cli_build_str_leaf_help(const struct lysc_node_leaf * leaf)
 {
 	assert(leaf);
 	assert(leaf->nodetype == LYS_LEAF);
-	assert(fill_range);
-	assert(type_string);
+	assert(leaf->type->basetype == LY_TYPE_STRING);
 
-	const struct lysc_type_num * type = (const struct lysc_type_num *)
+	const struct lysc_type_str * type = (const struct lysc_type_str *)
 	                                    leaf->type;
 	char *                       rng;
-	const char *                 base;
+	char *                       ptrns;
 	int                          blen;
 	const char *                 brief;
 	int                          dlen;
 	const char *                 desc;
 	int                          ilen;
+	const char *                 dflt;
+	char *                       help;
+
+	if (type->length) {
+		rng = cli_build_range_help(type->length,
+		                           cli_fill_urange_part_help);
+		if (!rng)
+			return NULL;
+	}
+	else
+		rng = NULL;
+	if (type->patterns) {
+		ptrns = cli_build_patterns_help(
+			(const struct lysc_pattern * const *)type->patterns);
+		if (!ptrns) {
+			help = NULL;
+			goto free_rng;
+		}
+	}
+	else
+		ptrns = NULL;
+	cli_help_briefn_desc(leaf->dsc, &brief, &blen, &desc, &dlen);
+	ilen = strlen(leaf->name) + sizeof(" -- ") - 1;
+	dflt = cli_value_str(&leaf->dflt);
+	if (dlen) {
+		if (asprintf(&help,
+		             "%s -- %*.*s\n"
+		             "%*stype:    %s\n"
+		             "%*slength:  %s\n"
+		             "%*spattern: %s\n"
+		             "%*sdefault: %s\n"
+		             "%*s%*.*s\n",
+		             leaf->name, blen, blen, brief,
+		             ilen, "", clily_basetype_str(LY_TYPE_STRING),
+		             ilen, "", rng ? rng : "none",
+		             ilen, "", ptrns ? ptrns : "none",
+		             ilen, "", dflt,
+		             ilen, "", dlen, dlen, desc) < 0)
+			help = NULL;
+	}
+	else {
+		if (asprintf(&help,
+		             "%s -- %*.*s\n"
+		             "%*stype:    %s\n"
+		             "%*slength:  %s\n"
+		             "%*spattern: %s\n"
+		             "%*sdefault: %s\n",
+		             leaf->name, blen, blen, brief,
+		             ilen, "", clily_basetype_str(LY_TYPE_STRING),
+		             ilen, "", rng ? rng : "none",
+		             ilen, "", ptrns ? ptrns : "none",
+		             ilen, "", dflt) < 0)
+			help = NULL;
+	}
+
+	free(ptrns);
+
+free_rng:
+	free(rng);
+
+	return help;
+}
+
+static char *
+cli_build_num_leaf_help(const struct lysc_node_leaf * leaf,
+                        cli_fill_range_part_help_fn * fill_range)
+{
+	assert(leaf);
+	assert((leaf->type->basetype == LY_TYPE_UINT8) ||
+	       (leaf->type->basetype == LY_TYPE_UINT16) ||
+	       (leaf->type->basetype == LY_TYPE_UINT32) ||
+	       (leaf->type->basetype == LY_TYPE_UINT64) ||
+	       (leaf->type->basetype == LY_TYPE_DEC64) ||
+	       (leaf->type->basetype == LY_TYPE_INT8) ||
+	       (leaf->type->basetype == LY_TYPE_INT16) ||
+	       (leaf->type->basetype == LY_TYPE_INT32) ||
+	       (leaf->type->basetype == LY_TYPE_INT64));
+	assert(leaf->nodetype == LYS_LEAF);
+	assert(fill_range);
+
+	const struct lysc_type_num * type = (const struct lysc_type_num *)
+	                                    leaf->type;
+	char *                       rng;
+	int                          blen;
+	const char *                 brief;
+	int                          dlen;
+	const char *                 desc;
+	int                          ilen;
+	const char *                 base;
 	const char *                 units;
 	const char *                 dflt;
 	char *                       help;
@@ -418,9 +556,9 @@ cli_build_num_leaf_help(const struct lysc_node_leaf * leaf,
 	}
 	else
 		rng = NULL;
-	base = type_string(type->basetype);
 	cli_help_briefn_desc(leaf->dsc, &brief, &blen, &desc, &dlen);
 	ilen = strlen(leaf->name) + sizeof(" -- ") - 1;
+	base = clily_basetype_str(type->basetype);
 	units = cli_leaf_units_str(leaf);
 	dflt = cli_value_str(&leaf->dflt);
 	if (dlen) {
@@ -481,7 +619,7 @@ cli_build_bool_leaf_help(const struct lysc_node_leaf * leaf)
 		             "%*sdefault: %s\n"
 		             "%*s%*.*s\n",
 		             leaf->name, blen, blen, brief,
-		             ilen, "", "boolean",
+		             ilen, "", clily_basetype_str(LY_TYPE_BOOL),
 		             ilen, "", dflt,
 		             ilen, "", dlen, dlen, desc) < 0)
 			return NULL;
@@ -492,7 +630,7 @@ cli_build_bool_leaf_help(const struct lysc_node_leaf * leaf)
 		             "%*stype:    %s\n"
 		             "%*sdefault: %s\n",
 		             leaf->name, blen, blen, brief,
-		             ilen, "", "bool",
+		             ilen, "", clily_basetype_str(LY_TYPE_BOOL),
 		             ilen, "", dflt) < 0)
 			return NULL;
 	}
@@ -512,12 +650,14 @@ cli_build_leaf_help(const struct lysc_node_leaf * leaf,
 	case LY_TYPE_UINT16:
 	case LY_TYPE_UINT32:
 	case LY_TYPE_UINT64:
-		return cli_build_num_leaf_help(leaf,
-		                               cli_fill_urange_part_help,
-		                               cli_uint_type_str);
+		return cli_build_num_leaf_help(leaf, cli_fill_urange_part_help);
 
 	case LY_TYPE_STRING:
+		return cli_build_str_leaf_help(leaf);
+
 	case LY_TYPE_BITS:
+		goto impl;
+
 	case LY_TYPE_BOOL:
 		return cli_build_bool_leaf_help(leaf);
 
@@ -527,20 +667,31 @@ cli_build_leaf_help(const struct lysc_node_leaf * leaf,
 	case LY_TYPE_INST:
 	case LY_TYPE_LEAFREF:
 	case LY_TYPE_UNION:
-		/* Implement me ! */
-		assert(0);
+		goto impl;
 
 	case LY_TYPE_INT8:
 	case LY_TYPE_INT16:
 	case LY_TYPE_INT32:
 	case LY_TYPE_INT64:
 	case LY_TYPE_DEC64:
-		return cli_build_num_leaf_help(leaf,
-		                               cli_fill_srange_part_help,
-		                               cli_sint_type_str);
+		return cli_build_num_leaf_help(leaf, cli_fill_srange_part_help);
 
 	default:
 		assert(0);
+	}
+
+impl:
+#warning remove me
+	/* Implement me ! */
+	{
+		char * str;
+
+		if (asprintf(&str,
+		             "IMPLEMENT %s support for '%s' node.\n",
+		             clily_basetype_str(leaf->type->basetype),
+		             leaf->name) < 0)
+			return NULL;
+		return str;
 	}
 }
 
@@ -549,15 +700,6 @@ static void
 cli_build_bin_leaf_help(const struct lysc_type * type, char * string, size_t size)
 {
 	switch (type->basetype) {
-    case LY_TYPE_STRING: {
-        struct lysc_type_str *str = (struct lysc_type_str *)type;
-
-        yprc_range(pctx, str->length, type->basetype, &flag);
-        LY_ARRAY_FOR(str->patterns, u) {
-            yprc_pattern(pctx, str->patterns[u], &flag);
-        }
-        break;
-    }
     case LY_TYPE_BITS:
     case LY_TYPE_ENUM: {
         /* bits and enums structures are compatible */
