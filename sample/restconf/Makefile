@@ -15,19 +15,20 @@ all: build
 .PHONY: install
 install: $(DESTDIR)$(PREFIX)/sbin/restconfd \
          $(DESTDIR)$(PREFIX)/sbin/start-http \
-         $(DESTDIR)$(PREFIX)/www/index.html
+         $(DESTDIR)$(PREFIX)/www/index.html \
+         $(DESTDIR)$(PREFIX)/www/oven.js
 $(DESTDIR)$(PREFIX)/sbin/restconfd: $(BUILDDIR)/restconfd
 	$(INSTALL) --mode=755 -D $(<) $(@)
 $(DESTDIR)$(PREFIX)/sbin/start-http: start-http.sh
 	sed 's;@@__PREFIX__@@;$(PREFIX);' $(<) > $(@)
 	chmod 755 $(@)
-$(DESTDIR)$(PREFIX)/www/index.html: index.html
+$(DESTDIR)$(PREFIX)/www/%: %
 	$(INSTALL) --mode=644 -D $(<) $(@)
 
 .PHONY: build
 build: $(BUILDDIR)/restconfd
-$(BUILDDIR)/restconfd: restconfd.c | $(BUILDDIR)/
-	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
+$(BUILDDIR)/restconfd: restconfd.c sysrepo.c | $(BUILDDIR)/
+	$(CC) -o $(@) $(CFLAGS) $(^) $(LDFLAGS)
 
 $(BUILDDIR)/:
 	$(MKDIR) -p $(@)

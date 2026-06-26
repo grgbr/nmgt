@@ -23,4 +23,7 @@ $BINDIR/nghttpx --add-forwarded=for --frontend='0.0.0.0,8080;no-tls' \
 	--backend='127.0.0.1,10000;/restconf/:/yang/:/streams/:/.well-known/;proto=h2' \
 	--backend='127.0.0.1,10081;;proto=h2' &
 child+=($!)
+echo ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+echo ~ server up http://127.0.0.1:8080 ~
+echo ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 wait

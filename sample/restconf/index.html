@@ -1,1 +1,45 @@
-TEST
+<!DOCTYPE html>
+<html lang="fr">
+	<head>
+		<meta charset="utf-8">
+		<title>Oven</title>
+	</head>
+
+	<body>
+		<h1>Oven</h1>
+		<table>
+			<tbody>
+				<tr>
+					<th>Temperature</th>
+					<td><span id="temperature"></span>℃</td>
+				</tr>
+				<tr>
+					<th>food-inside</th>
+					<td id="food_inside"></td>
+				</tr>
+			</tbody>
+		</table>
+		<form action="javascript:setTemperature(this.settemperature.value)">
+			<label>Set temperature (<span id="running"></span>℃)</label>
+			<input type="range" id="settemperature" name="temperature" min="25" max="250">
+			<input type="submit">
+		</form>
+		<form action="javascript:Insert(this.now.checked ? this.now.value : this.on_oven_ready.value)">
+			<label>Insert</label>
+			<input type="radio" id="now" name="time" value="now" checked="checked"><label for="now">now</label>
+			<input type="radio" id="on_oven_ready" name="time" value="on-oven-ready"><label for="on_oven_ready">on oven ready</label>
+			<input type="submit">
+		</form>
+		<form action="javascript:remove()">
+			<input type="submit" value="Remove">
+		</form>
+		<form action="javascript:turnonoff(true)">
+			<input type="submit" value="Turn On">
+		</form>
+		<form action="javascript:turnonoff(false)">
+			<input type="submit" value="Turn Off">
+		</form>
+		<div id="error"></div>
+		<script src="oven.js"></script>
+	</body>
+</html>
