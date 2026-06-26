@@ -1,6 +1,6 @@
 include ../utils.mk
 
-subdirs := oven restconf cli netconf
+subdirs := oven cli restconf netconf
 
 .PHONY: all
 all: build
