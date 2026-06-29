@@ -56,9 +56,19 @@ cli_schema_nodetype_str(uint16_t nodetype)
 	return lys_nodetype2str(nodetype);
 }
 
+enum cli_tree_walk_order {
+	CLI_TREE_WALK_PRE_ORDER,
+	CLI_TREE_WALK_POST_ORDER,
+	CLI_TREE_WALK_ORDER_NR
+};
+
+#define CLI_TREE_WALK_CONT_RET (0)
+#define CLI_TREE_WALK_SKIP_RET (1)
+
 struct cli_data_tree_walk;
 
 typedef int cli_data_tree_visit_fn(const struct lyd_node *,
+                                   enum cli_tree_walk_order,
                                    const struct cli_data_tree_walk *);
 
 struct cli_data_tree_walk {
@@ -81,72 +91,93 @@ cli_data_tree_walk_priv(const struct cli_data_tree_walk * walk)
 	return walk->priv;
 }
 
-/* TODO: remove recursion, add pre/in/post order events, refine invocation of visit(). */
+static int
+cli_data_tree_walk_recurs(struct cli_data_tree_walk * walk,
+                          const struct lyd_node *     node,
+                          cli_data_tree_visit_fn *    visit)
+{
+	assert(walk);
+	assert(node);
+	assert(visit);
+
+	int ret;
+
+	ret = visit(node, CLI_TREE_WALK_PRE_ORDER, walk);
+	if (ret == CLI_TREE_WALK_CONT_RET) {
+		const struct lyd_node * child;
+
+		walk->depth++;
+
+		LY_LIST_FOR(lyd_child(node), child) {
+			ret = cli_data_tree_walk_recurs(walk, child, visit);
+			if (ret < 0)
+				return ret;
+		}
+
+		walk->depth--;
+
+		ret = visit(node, CLI_TREE_WALK_POST_ORDER, walk);
+	}
+
+	return (ret != CLI_TREE_WALK_SKIP_RET) ? ret : CLI_TREE_WALK_CONT_RET;
+}
+
 static int
 cli_data_tree_walk(struct cli_data_tree_walk * walk,
-                   const struct lyd_node *     root,
+                   const struct lyd_node *     node,
                    cli_data_tree_visit_fn *    visit)
 {
 	assert(walk);
-	assert(root);
+	assert(node);
 	assert(visit);
 
-	const struct lyd_node * node;
+	int                     ret;
+	const struct lyd_node * sibling;
 
-	LY_LIST_FOR(root, node) {
-		int               ret;
-		struct lyd_node * child;
-
-		ret = visit(node, walk);
+	LY_LIST_FOR(node, sibling) {
+		ret = cli_data_tree_walk_recurs(walk, sibling, visit);
 		if (ret < 0)
 			return ret;
-
-		child = lyd_child(node);
-		if (child) {
-			walk->depth++;
-			cli_data_tree_walk(walk, child, visit);
-		}
 	}
-
-	walk->depth--;
 
 	return 0;
 }
 
-/* TODO: REVIEW ME!! */
-static int
-cli_data_print_node(const struct lyd_node *           node,
-                    const struct cli_data_tree_walk * walk)
+static void
+cli_data_fprint_node(FILE *                  stream,
+                     const struct lyd_node * node,
+                     int                     indent)
 {
 	const struct lysc_node * scn = node->schema;
-	int                      indent = cli_data_tree_walk_depth(walk) * 4;
-	
+
 	if (scn) {
 		if (scn->nodetype & LYD_NODE_INNER) {
-			printf("%*s%s <%s>\n",
-			       indent, "",
-			       scn->name,
-			       cli_schema_nodetype_str(scn->nodetype));
+			fprintf(stream,
+			        "%*s%s <%s>\n",
+			        indent, "",
+			        scn->name,
+			        cli_schema_nodetype_str(scn->nodetype));
 		}
 		else if (scn->nodetype & LYD_NODE_TERM) {
 			const struct lysc_type * type;
 
 			if (scn->nodetype == LYS_LEAF)
-			       type = ((const struct lysc_node_leaf *)
-			               scn)->type;
+				type = ((const struct lysc_node_leaf *)
+				        scn)->type;
 			else if (scn->nodetype == LYS_LEAFLIST)
-			       type = ((const struct lysc_node_leaflist *)
-			               scn)->type;
+				type = ((const struct lysc_node_leaflist *)
+				        scn)->type;
 			else
 				assert(0);
 
-			printf("%*s%s = '%s' <%s:%s:%s>\n",
-			       indent, "",
-			       scn->name,
-			       lyd_get_value(node),
-			       cli_schema_nodetype_str(scn->nodetype),
-			       type->name ? type->name : "builtin",
-			       cli_schema_basetype_str(type->basetype));
+			fprintf(stream,
+			        "%*s%s = '%s' <%s:%s:%s>\n",
+			        indent, "",
+			        scn->name,
+			        lyd_get_value(node),
+			        cli_schema_nodetype_str(scn->nodetype),
+			        type->name ? type->name : "builtin",
+			        cli_schema_basetype_str(type->basetype));
 		}
 		else
 			assert(0);
@@ -155,31 +186,70 @@ cli_data_print_node(const struct lyd_node *           node,
 		const struct lyd_node_opaq * opaq =
 			(const struct lyd_node_opaq *)node;
 
-		printf("%*s%s:%s = '%s' <%s>\n",
-		       indent, "",
-		       opaq->name.prefix ? opaq->name.prefix : "",
-		       opaq->name.name,
-		       opaq->value,
-		       "opaq");
+		fprintf(stream,
+		        "%*s%s:%s = '%s' <%s>\n",
+		        indent, "",
+		        opaq->name.prefix ? opaq->name.prefix : "",
+		        opaq->name.name,
+		        opaq->value,
+		        "opaq");
 	}
-
-	return 0;
 }
 
 static int
-clid_print(sr_session_ctx_t * session)
+cli_data_print_node(const struct lyd_node *           node,
+                    enum cli_tree_walk_order          order,
+                    const struct cli_data_tree_walk * walk)
 {
-	sr_data_t *               root = NULL;
-	int                       ret;
-	struct cli_data_tree_walk walk = CLI_DATA_TREE_WALK_INIT(NULL);
+	if (order == CLI_TREE_WALK_PRE_ORDER)
+		cli_data_fprint_node((FILE *)cli_data_tree_walk_priv(walk),
+		                     node,
+		                     4 * cli_data_tree_walk_depth(walk));
 
-        ret = sr_get_data(session, "/*", 0, 0, SR_OPER_DEFAULT, &root);
+	return CLI_TREE_WALK_CONT_RET;
+}
+
+static int
+cli_data_load_roots(sr_session_ctx_t * session, sr_data_t ** roots)
+{
+	int ret;
+
+	/*
+	 * Options that may be used with sr_get_data().
+	 * - SR_GET_NO_FILTER for conventional data stores, equivalent to "/*"
+	 *   xpath ;
+	 * - all sr_get_oper_flag_t enumerators for operational data stores.
+	 */
+	ret = sr_get_data(session, "/*", 0, 0, SR_OPER_DEFAULT, roots);
 	if (ret != SR_ERR_OK)
 		return ret;
 
-	ret = cli_data_tree_walk(&walk, root->tree, cli_data_print_node);
+	assert(*roots);
+	assert((*roots)->tree);
 
-	sr_release_data(root);
+	return SR_ERR_OK;
+}
+
+static void
+cli_data_release_trees(sr_data_t * trees)
+{
+	sr_release_data(trees);
+}
+
+static int
+cli_data_fprint_all(FILE * stream, sr_session_ctx_t * session)
+{
+	sr_data_t *               roots = NULL;
+	int                       ret;
+	struct cli_data_tree_walk walk = CLI_DATA_TREE_WALK_INIT(stream);
+
+	ret = cli_data_load_roots(session, &roots);
+	if (ret != SR_ERR_OK)
+		return ret;
+
+	ret = cli_data_tree_walk(&walk, roots->tree, cli_data_print_node);
+
+	cli_data_release_trees(roots);
 
 	return ret;
 }
@@ -204,7 +274,7 @@ main(int argc, const char * const argv[])
 	if (err != SR_ERR_OK)
 		goto disconnect;
 
-	if (!clid_print(sess))
+	if (!cli_data_fprint_all(stdout, sess))
 		xit = EXIT_SUCCESS;
 
 	if (sr_session_stop(sess) != SR_ERR_OK)
