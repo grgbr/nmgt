@@ -29,3 +29,30 @@ cli
 * cmd and args validation with proper user error messages
 * https://github.com/okda-networks/onm-cli
 * klish
+
+
+Pros
+====
+
+* almost 100% auto generated cli possible
+* auto generated web data model accesses (multiple yang npm modules available)
+* gratuitous netconf
+* gratuitous kea support
+* long-term restconf standard compliant API
+* partial frr support (API and yang data modeling)
+* yang schema (interop / model stability / known standard)
+* flexible yang data model
+* community based development (public opensource components)
+* datastore / transactional
+* export / import
+* fine granularity nacm / privileges model
+* interfaces plugin(s) available (integration workload to estimate):
+  * https://github.com/telekom/sysrepo-plugin-interfaces
+  * https://github.com/okda-networks/iproute2-sysrepo
+  * InfixOS (https://www.kernelkit.org/)
+
+Cons
+====
+
+* restconf like interface to develop (for web page API implementation)
+* limited sysrepo/gnmi support (see sysrepo-gnxi)
