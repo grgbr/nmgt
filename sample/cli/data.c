@@ -216,7 +216,7 @@ cli_data_load_roots(sr_session_ctx_t * session, sr_data_t ** roots)
 
 	/*
 	 * Options that may be used with sr_get_data().
-	 * - SR_GET_NO_FILTER for conventional data stores, equivalent to "/*"
+	 * - SR_GET_NO_FILTER for conventional data stores, equivalent to root
 	 *   xpath ;
 	 * - all sr_get_oper_flag_t enumerators for operational data stores.
 	 */
