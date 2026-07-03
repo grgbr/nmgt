@@ -633,14 +633,24 @@ cli_init_context(struct cli_context * context)
 
 	cli_setup_log(CONFIG_CLI_LOG_LEVEL);
 
-	err = sr_connect(0, &context->conn);
+#if 1
+	//err = sr_context_options(SR_CTX_NO_PRINTED | SR_CTX_SET_PRIV_PARSED, 1, NULL);
+	err = sr_context_options(SR_CTX_NO_PRINTED | SR_CTX_SET_PRIV_PARSED, 1, NULL);
+	if (err) {
+		cli_log("cannot setup repo connection: %s",
+		        sr_strerror(err));
+		return err;
+	}
+#endif
+
+	err = sr_connect(SR_CONN_DEFAULT, &context->conn);
 	if (err != SR_ERR_OK) {
 		cli_log("cannot open repo connection: %s",
 		        sr_strerror(err));
 		return err;
 	}
 
-	err = sr_session_start(context->conn, SR_DS_RUNNING, &context->sess);
+	err = sr_session_start(context->conn, SR_DS_OPERATIONAL, &context->sess);
 	if (err != SR_ERR_OK) {
 		cli_log("cannot start repo session: %s",
 		        sr_strerror(err));
@@ -799,33 +809,62 @@ cli_schema_exec_work(const struct cli_work * work,
 {
 	int ret;
 
+#if 0
 	if (!context->select) {
-		ret = cli_load_config(context, "/*", 0, &context->select);
+		ret = cli_load_config(context, "/oven:oven-state/temperature", 0, &context->select);
 		if (ret != SR_ERR_OK) {
 			cli_log("schema: cannot load data: %s.",
 			        sr_strerror(ret));
 			return ret;
 		}
-
 #warning TODO: set prompt
 	}
+#endif
 
+	const struct ly_ctx * lyctx;
+	struct ly_set *       nodes;
+
+	lyctx = sr_session_acquire_context(context->sess);
+	assert(lyctx);
+	ret = lys_find_xpath(lyctx, NULL, "/*", LYS_FIND_NO_MATCH_ERROR, &nodes);
+	if (ret == LY_SUCCESS) {
+		unsigned int n;
+		for (n = 0; n < nodes->count; n++) {
+			const struct lys_module * mod = nodes->snodes[n]->module;
+			if (!mod->implemented || sr_is_module_internal(mod))
+				continue;
+			ret = lys_print_module(context->lyout,
+			                     mod,
+			                     /*LYS_OUT_YANG_COMPILED*/LYS_OUT_TREE,
+			                     80,
+			                     0/*LYS_PRINT_NO_SUBSTMT*/);
+		}
+	}
+	ly_set_free(nodes, NULL);
+	sr_session_release_context(context->sess);
+
+
+#if 0
 #warning FIXME (implemented / internal / out format)
 #if 1
 	const struct lyd_node * node;
 	LY_LIST_FOR(context->select->tree, node) {
 		ret = lys_print_node(context->lyout,
 		                     node->schema,
-		                     LYS_OUT_TREE, //LYS_OUT_YANG_COMPILED,
+		                     LYS_OUT_TREE,
 		                     0,
-		                     0);
+		                     0/* LYS_PRINT_NO_SUBSTMT */);
 	}
 #else
-	ret = lys_print_module(context->lyout,
-	                       context->select->tree->schema->module,
-	                       LYS_OUT_TREE,
-	                       0,
-	                       0);
+	const struct lyd_node * node;
+	LY_LIST_FOR(context->select->tree, node) {
+		ret = lys_print_module(context->lyout,
+		                       node->schema->module,
+		                       LYS_OUT_TREE,
+		                       0,
+		                       0/* LYS_PRINT_NO_SUBSTMT */);
+	}
+#endif
 #endif
 	if (ret != LY_SUCCESS) {
 		cli_log("schema: cannot display: %s.", ly_strerr(ret));
