@@ -1,21 +1,8 @@
-#define _GNU_SOURCE
-
-#define CONFIG_CLI_ASSERT 1
-#define CONFIG_CLI_LOG 1
-#define CONFIG_CLI_LOG_LEVEL 5
-
-#include <sysrepo.h>
-#include <stdbool.h>
+#include "yang.h"
 #include <stdlib.h>
 #include <ctype.h>
 #include <errno.h>
 #include <assert.h>
-
-#if defined(CONFIG_CLI_ASSERT)
-#define cli_assert(...) assert(__VA_ARGS__)
-#else  /* !defined(CONFIG_CLI_ASSERT) */
-#define cli_assert(...)
-#endif /* defined(CONFIG_CLI_ASSERT) */
 
 /*
  * Maximum size available to store a command line including the terminating NULL
@@ -28,40 +15,9 @@
  */
 #define CLI_XPATH_MAX (128U)
 
-#define CLI_TREE_WALK_CONT_RET (0)
-#define CLI_TREE_WALK_SKIP_RET (1)
-
-enum cli_tree_walk_event {
-	CLI_TREE_WALK_PRE_EVT,
-	CLI_TREE_WALK_POST_EVT,
-	CLI_TREE_WALK_EVT_NR
-};
-
-static void *
-cli_malloc(size_t size)
-{
-	cli_assert(size);
-
-	void * data;
-
-	data = malloc(size);
-	if (!data)
-		abort();
-
-	return data;
-}
-
-static void
-cli_free(void * data)
-{
-	free(data);
-}
-
-#define cli_log(_format, ...) \
-	fprintf(stderr, \
-	        "%s: " _format "\n", \
-	        program_invocation_short_name, \
-	        ## __VA_ARGS__)
+/******************************************************************************
+ * Utilities
+ ******************************************************************************/
 
 #if defined(CONFIG_CLI_ASSERT)
 
@@ -106,105 +62,20 @@ cli_assert_args(int argc, const char * const argv[])
 #endif /* defined(CONFIG_CLI_ASSERT) */
 
 /******************************************************************************
- * Work handling
- ******************************************************************************/
-
-struct cli_work;
-struct cli_context;
-
-typedef int cli_work_exec_fn(const struct cli_work *, struct cli_context *);
-
-typedef void cli_work_release_fn(struct cli_work *, struct cli_context *);
-
-struct cli_work_ops {
-	cli_work_exec_fn *    exec;
-	cli_work_release_fn * release;
-};
-
-#define cli_assert_work_ops(_ops) \
-	cli_assert(_ops); \
-	cli_assert((_ops)->exec); \
-	cli_assert((_ops)->release)
-
-struct cli_work {
-	const struct cli_work_ops * ops;
-};
-
-#define cli_assert_work(_work) \
-	cli_assert(_work); \
-	cli_assert_work_ops((_work)->ops)
-
-static struct cli_work *
-cli_create_work(size_t size, const struct cli_work_ops * ops)
-{
-	cli_assert(size >= sizeof(struct cli_work));
-	cli_assert_work_ops(ops);
-
-	struct cli_work * wk;
-
-	wk = cli_malloc(size);
-	wk->ops = ops;
-
-	return wk;
-}
-
-static void
-cli_release_work(struct cli_work * work, struct cli_context * context)
-{
-	cli_assert_work(work);
-	cli_assert(context);
-
-	work->ops->release(work, context);
-}
-
-static void
-cli_destroy_work(struct cli_work * work)
-{
-	cli_assert_work(work);
-
-	cli_free(work);
-}
-
-/******************************************************************************
  * Node handling
  ******************************************************************************/
-
-struct cli_node;
-
-typedef int cli_node_parse_fn(const struct cli_node *,
-                              int,
-                              const char * const [],
-                              struct cli_context *);
-
-typedef void cli_node_release_fn(struct cli_node *, struct cli_context *);
-
-struct cli_node_ops {
-	cli_node_parse_fn *   parse;
-	cli_node_release_fn * release;
-};
 
 #define cli_assert_node_ops(_ops) \
 	cli_assert(_ops); \
 	cli_assert((_ops)->parse); \
 	cli_assert((_ops)->release); \
 
-struct cli_node {
-	const struct cli_node_ops * ops;
-	struct cli_node *           next;
-	struct cli_node *           prev;
-	struct cli_node *           child;
-};
-
-#define CLI_NODE_SETUP(_node, _ops) \
-	{ .ops = _ops, .next = NULL, .prev = &(_node), .child = NULL }
-
-typedef int cli_node_tree_visit_fn(struct cli_node *,
-                                   enum cli_tree_walk_event,
-                                   void *);
-
 #define cli_assert_node(_node) \
 	cli_assert(_node); \
 	cli_assert_node_ops((_node)->ops)
+
+#define CLI_NODE_SETUP(_node, _ops) \
+	{ .ops = _ops, .next = NULL, .prev = &(_node), .child = NULL }
 
 #define cli_foreach_child(_node, _child) \
 	for (_child = (_node)->child; _child; _child = (_child)->next)
@@ -214,101 +85,121 @@ typedef int cli_node_tree_visit_fn(struct cli_node *,
 	     _child && (_tmp = (_child)->next); \
 	     _child = _tmp, _tmp = (_child)->next)
 
+typedef int cli_node_visit_fn(struct cli_context *,
+                              struct cli_node *,
+                              enum cli_walk_event,
+                              void *);
+
 static int
-cli_node_tree_walk_recurs(struct cli_node *        node,
-                          cli_node_tree_visit_fn * visit,
-                          void *                   data)
+cli_walk_node_recurs(struct cli_context * context,
+                     struct cli_node *    node,
+                     cli_node_visit_fn *  visit,
+                     void *               data)
 {
+	cli_assert_context(context);
 	cli_assert_node(node);
 	cli_assert(visit);
 
 	int ret;
 
-	ret = visit(node, CLI_TREE_WALK_PRE_EVT, data);
-	if (ret == CLI_TREE_WALK_CONT_RET) {
+	ret = visit(context, node, CLI_WALK_PRE_EVT, data);
+	if (ret == CLI_WALK_CONT_RET) {
 		struct cli_node * child;
 
 		cli_foreach_child(node, child) {
-			ret = cli_node_tree_walk_recurs(child, visit, data);
+			ret = cli_walk_node_recurs(context, child, visit, data);
 			if (ret < 0)
 				return ret;
 		}
 
-		ret = visit(node, CLI_TREE_WALK_POST_EVT, data);
+		ret = visit(context, node, CLI_WALK_POST_EVT, data);
 	}
 
-	return (ret != CLI_TREE_WALK_SKIP_RET) ? ret : CLI_TREE_WALK_CONT_RET;
+	cli_assert(ret <= 0);
+	return ret;
 }
 
 static int
-cli_node_tree_walk(struct cli_node *        tree,
-                   cli_node_tree_visit_fn * visit,
-                   void *                   data)
+cli_walk_node(struct cli_context * context,
+              struct cli_node *    node,
+              cli_node_visit_fn *  visit,
+              void *               data)
 {
-	cli_assert_node(tree);
+	cli_assert_context(context);
+	cli_assert_node(node);
 	cli_assert(visit);
 
 	struct cli_node * child;
 	int               ret = 0;
 
-	cli_foreach_child(tree, child) {
-		ret = cli_node_tree_walk_recurs(child, visit, data);
+	cli_foreach_child(node, child) {
+		ret = cli_walk_node_recurs(context, child, visit, data);
 		if (ret < 0)
-			break;
+			return ret;
 	}
 
-	return ret;
+	cli_assert(!ret);
+	return 0;
 }
 
 static int
-cli_node_tree_walk_recurs_safe(struct cli_node *        node,
-                               cli_node_tree_visit_fn * visit,
-                               void *                   data)
+cli_walk_node_recurs_safe(struct cli_context * context,
+                          struct cli_node *    node,
+                          cli_node_visit_fn *  visit,
+                          void *               data)
 {
+	cli_assert_context(context);
 	cli_assert_node(node);
 	cli_assert(visit);
 
 	int ret;
 
-	ret = visit(node, CLI_TREE_WALK_PRE_EVT, data);
-	if (ret == CLI_TREE_WALK_CONT_RET) {
+	ret = visit(context, node, CLI_WALK_PRE_EVT, data);
+	if (ret == CLI_WALK_CONT_RET) {
 		struct cli_node * child;
 		struct cli_node * tmp;
 
 		cli_foreach_child_safe(node, child, tmp) {
-			ret = cli_node_tree_walk_recurs(child, visit, data);
+			ret = cli_walk_node_recurs_safe(context,
+			                                child,
+			                                visit,
+			                                data);
 			if (ret < 0)
 				return ret;
 		}
 
-		ret = visit(node, CLI_TREE_WALK_POST_EVT, data);
+		ret = visit(context, node, CLI_WALK_POST_EVT, data);
 	}
 
-	return (ret != CLI_TREE_WALK_SKIP_RET) ? ret : CLI_TREE_WALK_CONT_RET;
+	cli_assert(ret <= 0);
+	return ret;
 }
 
 static int
-cli_node_tree_walk_safe(struct cli_node *        tree,
-                        cli_node_tree_visit_fn * visit,
-                        void *                   data)
+cli_walk_node_safe(struct cli_context * context,
+                   struct cli_node *    node,
+                   cli_node_visit_fn *  visit,
+                   void *               data)
 {
-	cli_assert_node(tree);
+	cli_assert_context(context);
+	cli_assert_node(node);
 	cli_assert(visit);
 
 	struct cli_node * child;
 	struct cli_node * tmp;
 	int               ret = 0;
 
-	cli_foreach_child_safe(tree, child, tmp) {
-		ret = cli_node_tree_walk_recurs_safe(child, visit, data);
+	cli_foreach_child_safe(node, child, tmp) {
+		ret = cli_walk_node_recurs_safe(context, child, visit, data);
 		if (ret < 0)
-			break;
+			return ret;
 	}
 
-	return ret;
+	cli_assert(!ret);
+	return 0;
 }
 
-void
+static void
 cli_node_add_child(struct cli_node * node, struct cli_node * child)
 {
 	cli_assert_node(node);
@@ -395,24 +286,6 @@ cli_destroy_node(struct cli_node * node)
 /******************************************************************************
  * Overall cli context handling
  ******************************************************************************/
-
-#define CLI_WORK_NR (128U)
-
-struct cli_context {
-	sr_conn_ctx_t *    conn;
-	sr_session_ctx_t * sess;
-	unsigned int       wkcnt;
-	struct cli_work *  wkq[CLI_WORK_NR];
-	struct cli_node    root;
-	struct ly_out *    lyout;
-	sr_data_t *        select;
-};
-
-#define cli_assert_context(_ctx) \
-	cli_assert(_ctx); \
-	cli_assert((_ctx)->conn); \
-	cli_assert((_ctx)->sess); \
-	cli_assert((_ctx)->lyout)
 
 static int
 cli_load_config(const struct cli_context * context,
@@ -534,12 +407,6 @@ static const struct cli_node_ops cli_root_ops = {
 	.release = cli_release_node_null
 };
 
-static void
-cli_register_cmd(struct cli_context * context, struct cli_node * command)
-{
-	cli_node_add_child(&context->root, command);
-}
-
 static int
 cli_parse(struct cli_context * context, int argc, const char * const argv[])
 {
@@ -633,16 +500,6 @@ cli_init_context(struct cli_context * context)
 
 	cli_setup_log(CONFIG_CLI_LOG_LEVEL);
 
-#if 1
-	//err = sr_context_options(SR_CTX_NO_PRINTED | SR_CTX_SET_PRIV_PARSED, 1, NULL);
-	err = sr_context_options(SR_CTX_NO_PRINTED | SR_CTX_SET_PRIV_PARSED, 1, NULL);
-	if (err) {
-		cli_log("cannot setup repo connection: %s",
-		        sr_strerror(err));
-		return err;
-	}
-#endif
-
 	err = sr_connect(SR_CONN_DEFAULT, &context->conn);
 	if (err != SR_ERR_OK) {
 		cli_log("cannot open repo connection: %s",
@@ -657,21 +514,26 @@ cli_init_context(struct cli_context * context)
 		goto disconnect;
 	}
 
+	context->lyctx = sr_session_acquire_context(context->sess);
+	assert(context->lyctx);
+
 	err = ly_out_new_file(stdout, &context->lyout);
 	if (err != LY_SUCCESS) {
 		cli_log("cannot open yang output printer: %s",
 		        ly_strerr(err));
 		err = SR_ERR_LY;
-		goto stop;
+		goto release;
 	}
 
 	context->wkcnt = 0;
 	cli_setup_node(&context->root, &cli_root_ops);
 	context->select = NULL;
+	context->isatty = !!isatty(STDOUT_FILENO);
 
 	return SR_ERR_OK;
 
-stop:
+release:
+	sr_session_release_context(context->sess);
 	sr_session_stop(context->sess);
 disconnect:
 	sr_disconnect(context->conn);
@@ -680,14 +542,15 @@ disconnect:
 }
 
 static int
-cli_visitn_destroy_node(struct cli_node *        node,
-                        enum cli_tree_walk_event event,
-                        void *                   data)
+cli_visitn_destroy_node(struct cli_context * context,
+                        struct cli_node *    node,
+                        enum cli_walk_event  event,
+                        void *               data)
 {
-	if (event == CLI_TREE_WALK_POST_EVT)
-		cli_release_node(node, data);
+	if (event == CLI_WALK_POST_EVT)
+		cli_release_node(node, context);
 
-	return CLI_TREE_WALK_CONT_RET;
+	return CLI_WALK_CONT_RET;
 }
 
 static void
@@ -697,10 +560,12 @@ cli_fini_context(struct cli_context * context)
 
 	cli_unload(context->select);
 	cli_release_workq(context);
-	cli_node_tree_walk_safe(&context->root,
-	                        cli_visitn_destroy_node,
-	                        context);
+	cli_walk_node_safe(context,
+	                   &context->root,
+	                   cli_visitn_destroy_node,
+	                   NULL);
 	ly_out_free(context->lyout, NULL, 0);
+	sr_session_release_context(context->sess);
 	sr_session_stop(context->sess);
 	sr_disconnect(context->conn);
 }
@@ -804,10 +669,181 @@ static struct cli_node cli_xpath_cmd = CLI_NODE_SETUP(cli_xpath_cmd,
  ******************************************************************************/
 
 static int
+cli_show_module_yang(struct cli_context * context,
+                     const char *         module)
+{
+	const struct lys_module * mod;
+	int                       ret;
+
+	mod = cli_lys_find_module(context, module);
+	if (!mod) {
+		cli_log("'%s': module not found.", module);
+		return SR_ERR_NOT_FOUND;
+	}
+
+	ret = cli_lys_print_module_yang(context, mod, 0);
+	if (ret != LY_SUCCESS) {
+		cli_log("'%s': cannot show module YANG: %s.",
+		        module,
+		        ly_strerr(ret));
+		return SR_ERR_LY;
+	}
+
+	return SR_ERR_OK;
+}
+
+static int
+cli_show_module_diag(struct cli_context * context, const char * module)
+{
+	const struct lys_module * mod;
+	int                       ret;
+
+	mod = cli_lys_find_module(context, module);
+	if (!mod) {
+		cli_log("'%s': invalid module.", module);
+		return SR_ERR_NOT_FOUND;
+	}
+
+	ret = cli_lys_print_module_diag(context, mod);
+	if (ret != LY_SUCCESS) {
+		cli_log("'%s': cannot show module tree diagram: %s.",
+		        module,
+		        ly_strerr(ret));
+		return SR_ERR_LY;
+	}
+
+	return SR_ERR_OK;
+}
+
+static int
+cli_show_node_yang(struct cli_context *     context,
+                   const struct lysc_node * subtree,
+                   const char *             xpath)
+{
+	const struct lysc_node * node;
+	int                      ret;
+
+	node = cli_lysc_find_node(context, subtree, xpath);
+	if (!node) {
+		cli_log("'%s': XPATH node not found.", xpath);
+		return SR_ERR_NOT_FOUND;
+	}
+
+	ret = cli_lysc_print_node_yang(context, node, 0);
+	if (ret != LY_SUCCESS) {
+		cli_log("'%s': cannot show XPATH node YANG: %s.",
+		        xpath,
+		        ly_strerr(ret));
+		return SR_ERR_LY;
+	}
+
+	return SR_ERR_OK;
+}
+
+static int
+cli_show_nodeset_yang(struct cli_context *     context,
+                      const struct lysc_node * subtree,
+                      const char *             xpath)
+{
+	struct ly_set * nodes;
+
+	nodes = cli_lysc_find_nodeset(context, subtree, xpath);
+	if (nodes) {
+		cli_assert(nodes->count);
+
+		int ret;
+
+		ret = cli_lysc_print_nodeset_yang(context, nodes, 0);
+		ly_set_free(nodes, NULL);
+
+		if (ret == LY_SUCCESS)
+			return SR_ERR_OK;
+
+		cli_log("'%s': cannot show XPATH nodes YANG: %s.",
+		        xpath,
+		        ly_strerr(ret));
+		return SR_ERR_LY;
+	}
+	else {
+		cli_log("'%s': XPATH nodes not found.", xpath);
+		return SR_ERR_NOT_FOUND;
+	}
+}
+
+static int
+cli_show_node_diag(struct cli_context *     context,
+                   const struct lysc_node * subtree,
+                   const char *             xpath)
+{
+	const struct lysc_node * node;
+	int                      ret;
+
+	node = cli_lysc_find_node(context, subtree, xpath);
+	if (!node) {
+		cli_log("'%s': XPATH node not found.", xpath);
+		return SR_ERR_NOT_FOUND;
+	}
+
+	ret = cli_lysc_print_node_diag(context, node);
+	if (ret != LY_SUCCESS) {
+		cli_log("'%s': cannot show XPATH node tree diagram: %s.",
+		        xpath,
+		        ly_strerr(ret));
+		return SR_ERR_LY;
+	}
+
+	return SR_ERR_OK;
+}
+
+static int
+cli_show_nodeset_diag(struct cli_context *     context,
+                      const struct lysc_node * subtree,
+                      const char *             xpath)
+{
+	struct ly_set * nodes;
+
+	nodes = cli_lysc_find_nodeset(context, subtree, xpath);
+	if (nodes) {
+		cli_assert(nodes->count);
+
+		int ret;
+
+		ret = cli_lysc_print_nodeset_diag(context, nodes);
+		ly_set_free(nodes, NULL);
+
+		if (ret == LY_SUCCESS)
+			return SR_ERR_OK;
+
+		cli_log("'%s': cannot show XPATH nodes tree diagram: %s.",
+		        xpath,
+		        ly_strerr(ret));
+		return SR_ERR_LY;
+	}
+	else {
+		cli_log("'%s': XPATH nodes not found.", xpath);
+		return SR_ERR_NOT_FOUND;
+	}
+}
+
+static int
 cli_schema_exec_work(const struct cli_work * work,
                      struct cli_context *    context)
 {
 	int ret;
+
+	//cli_show_node_yang(context, NULL, "/oven:oven-state");
+
+	//cli_show_nodeset_yang(context, NULL, "/oven:*");
+	// first unprefixed top-level container
+	//cli_show_nodeset_yang(context, NULL, "/oven");
+	//cli_show_nodeset_yang(context, NULL, "oven");
+
+	//cli_show_node_diag(context, NULL, "/oven:oven-state");
+
+	//cli_show_nodeset_diag(context, NULL, "/oven:*");
+	// first unprefixed top-level container
+	//cli_show_nodeset_diag(context, NULL, "/oven");
+	//cli_show_nodeset_diag(context, NULL, "oven");
 
 #if 0
 	if (!context->select) {
@@ -819,32 +855,7 @@ cli_schema_exec_work(const struct cli_work * work,
 		}
 #warning TODO: set prompt
 	}
-#endif
 
-	const struct ly_ctx * lyctx;
-	struct ly_set *       nodes;
-
-	lyctx = sr_session_acquire_context(context->sess);
-	assert(lyctx);
-	ret = lys_find_xpath(lyctx, NULL, "/*", LYS_FIND_NO_MATCH_ERROR, &nodes);
-	if (ret == LY_SUCCESS) {
-		unsigned int n;
-		for (n = 0; n < nodes->count; n++) {
-			const struct lys_module * mod = nodes->snodes[n]->module;
-			if (!mod->implemented || sr_is_module_internal(mod))
-				continue;
-			ret = lys_print_module(context->lyout,
-			                     mod,
-			                     /*LYS_OUT_YANG_COMPILED*/LYS_OUT_TREE,
-			                     80,
-			                     0/*LYS_PRINT_NO_SUBSTMT*/);
-		}
-	}
-	ly_set_free(nodes, NULL);
-	sr_session_release_context(context->sess);
-
-
-#if 0
 #warning FIXME (implemented / internal / out format)
 #if 1
 	const struct lyd_node * node;
@@ -932,16 +943,57 @@ static struct cli_node cli_schema_cmd = CLI_NODE_SETUP(cli_schema_cmd,
  ******************************************************************************/
 
 static int
+cli_generate_cmd(struct cli_context *     context,
+                 const struct lysc_node * node,
+                 enum cli_walk_event      event,
+                 void *                   data)
+{
+
+	switch (node->nodetype) {
+	case LYS_CONTAINER:
+		/*
+		cmd = cli_create_node(sizeof(struct cli_node),
+		                const struct cli_node_ops * ops);
+		cli_node_add_child(parent, cmd);
+		return CLI_WALK_SKIP_RET;
+		*/
+
+	default:
+		{
+			const char * xpath;
+
+			xpath = cli_lysc_xpath(node);
+			cli_log("'%s': %s support not implemented !",
+			        xpath,
+			        cli_ly_nodetype_str(node->nodetype));
+			/* cli_free(xpath); */
+			assert(0);
+		}
+	}
+}
+
+static int
 cli_init(struct cli_context * context)
 {
-	int ret;
+	int                       ret;
+	unsigned int              m;
+	const struct lys_module * mod;
 
 	ret = cli_init_context(context);
 	if (ret)
 		return ret;
 
-	cli_register_cmd(context, &cli_xpath_cmd);
-	cli_register_cmd(context, &cli_schema_cmd);
+	cli_node_add_child(&context->root, &cli_xpath_cmd);
+	cli_node_add_child(&context->root, &cli_schema_cmd);
+
+	cli_lys_foreach_module(context, m, mod) {
+		ret = cli_lys_walk_module(context,
+		                          mod,
+		                          cli_generate_cmd,
+		                          NULL);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }

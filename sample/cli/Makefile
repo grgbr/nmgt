@@ -28,8 +28,8 @@ $(BUILDDIR)/nmgmt-schema: schema.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
 $(BUILDDIR)/nmgmt-data: data.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
-$(BUILDDIR)/nmgmt-cli: cli.c | $(BUILDDIR)/
-	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
+$(BUILDDIR)/nmgmt-cli: common.c yang.c cli.c | $(BUILDDIR)/
+	$(CC) -o $(@) $(CFLAGS) $(^) $(LDFLAGS)
 
 $(BUILDDIR)/:
 	$(MKDIR) -p $(@)

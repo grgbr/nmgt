@@ -1,0 +1,226 @@
+#include "yang.h"
+
+/******************************************************************************
+ * Libyang utils
+ ******************************************************************************/
+
+const char *
+cli_ly_basetype_str(LY_DATA_TYPE basetype)
+{
+	switch (basetype) {
+	case LY_TYPE_BINARY:
+		return "bin";
+	case LY_TYPE_UINT8:
+		return "uint8";
+	case LY_TYPE_UINT16:
+		return "uint16";
+	case LY_TYPE_UINT32:
+		return "uint32";
+	case LY_TYPE_UINT64:
+		return "uint64";
+	case LY_TYPE_STRING:
+		return "str";
+	case LY_TYPE_BITS:
+		return "bits";
+	case LY_TYPE_BOOL:
+		return "bool";
+	case LY_TYPE_DEC64:
+		return "dec64";
+	case LY_TYPE_EMPTY:
+		return "empty";
+	case LY_TYPE_ENUM:
+		return "enum";
+	case LY_TYPE_IDENT:
+		return "idref";
+	case LY_TYPE_INST:
+		return "instid";
+	case LY_TYPE_LEAFREF:
+		return "leafref";
+	case LY_TYPE_UNION:
+		return "union";
+	case LY_TYPE_INT8:
+		return "int8";
+	case LY_TYPE_INT16:
+		return "int16";
+	case LY_TYPE_INT32:
+		return "int32";
+	case LY_TYPE_INT64:
+		return "int64";
+	default:
+		return "??";
+	}
+}
+
+/******************************************************************************
+ * Libyang module handling
+ ******************************************************************************/
+
+const struct lys_module *
+cli_lys_find_module(const struct cli_context * context, const char * module)
+{
+	cli_assert_context(context);
+	cli_assert(module);
+
+	const struct lys_module * mod;
+
+	mod = ly_ctx_get_module_implemented(context->lyctx, module);
+	if (mod && !sr_is_module_internal(mod))
+		return mod;
+
+	return NULL;
+}
+
+const struct lys_module *
+cli_lys_next_module(const struct cli_context * context, unsigned int * index)
+{
+	const struct lys_module * mod;
+
+	mod = ly_ctx_get_module_iter(context->lyctx, index);
+	while (mod) {
+		if (mod->implemented && !sr_is_module_internal(mod))
+			break;
+		mod = ly_ctx_get_module_iter(context->lyctx, index);
+	}
+
+	return mod;
+}
+
+int
+cli_lys_walk_module(struct cli_context *      context,
+                    const struct lys_module * module,
+                    cli_lysc_visit_fn *       visit,
+                    void *                    data)
+{
+	cli_assert_context(context);
+	cli_assert(module);
+	cli_assert(module->compiled);
+	cli_assert(visit);
+
+	const struct lysc_node * root;
+	int                      ret = 0;
+
+	/*
+	 * Iterate over schema nodes only, i.e., not actions / rpcs, neither
+	 * notifications (which may be reached thanks to the parent container
+	 * lysc_node).
+	 */
+	LY_LIST_FOR(module->compiled->data, root) {
+		ret = cli_lysc_walk_node(context, root, visit, data);
+		if (ret < 0)
+			return ret;
+	}
+
+	cli_assert(!ret);
+	return 0;
+}
+
+LY_ERR
+cli_lys_print_module_diag(const struct cli_context * context,
+                          const struct lys_module *  module)
+{
+	/*
+	 * Note: the LYS_PRINT_NO_SUBSTMT option is ignored when outputting
+	 * module YANG tree diagram.
+	 */
+	return lys_print_module(context->lyout,
+	                        module,
+	                        LYS_OUT_TREE,
+	                        cli_term_cols(context),
+	                        0);
+}
+
+/******************************************************************************
+ * Libyang (compiled) schema node handling
+ ******************************************************************************/
+
+char *
+cli_lysc_xpath(const struct lysc_node * node)
+{
+	char * xpath;
+
+	xpath = lysc_path(node, LYSC_PATH_LOG, NULL, 0);
+	if (!xpath)
+		abort();
+
+	return xpath;
+}
+
+int
+cli_lysc_walk_node(struct cli_context *     context,
+                   const struct lysc_node * node,
+                   cli_lysc_visit_fn *      visit,
+                   void *                   data)
+{
+	cli_assert_context(context);
+	cli_assert(node);
+	cli_assert(visit);
+
+	int ret;
+
+	ret = visit(context, node, CLI_WALK_PRE_EVT, data);
+	if (ret == CLI_WALK_CONT_RET) {
+		const struct lysc_node * child;
+
+		LY_LIST_FOR(lysc_node_child(node), child) {
+			ret = cli_lysc_walk_node(context, child, visit, data);
+			if (ret < 0)
+				return ret;
+		}
+
+		ret = visit(context, node, CLI_WALK_POST_EVT, data);
+	}
+
+	cli_assert(ret <= 0);
+	return ret;
+}
+
+LY_ERR
+cli_lysc_print_nodeset_yang(const struct cli_context * context,
+                            const struct ly_set *      nodeset,
+                            bool                       nosub)
+{
+	cli_assert(nodeset);
+	cli_assert(nodeset->count);
+
+	unsigned int n;
+
+	for (n = 0; n < nodeset->count; n++) {
+		int ret;
+
+		/*
+		 * Note: line width argument is ignored when outputting node
+		 * YANG specification.
+		 */
+		ret = cli_lysc_print_node_yang(context,
+		                               nodeset->snodes[n],
+		                               nosub);
+		if (ret != LY_SUCCESS)
+			return ret;
+	}
+
+	return LY_SUCCESS;
+}
+
+LY_ERR
+cli_lysc_print_nodeset_diag(const struct cli_context * context,
+                            const struct ly_set *      nodeset)
+{
+	cli_assert(nodeset);
+	cli_assert(nodeset->count);
+
+	unsigned int n;
+
+	for (n = 0; n < nodeset->count; n++) {
+		int ret;
+
+		/*
+		 * Note: line width argument is ignored when outputting node
+		 * YANG specification.
+		 */
+		ret = cli_lysc_print_node_diag(context, nodeset->snodes[n]);
+		if (ret != LY_SUCCESS)
+			return ret;
+	}
+
+	return LY_SUCCESS;
+}
