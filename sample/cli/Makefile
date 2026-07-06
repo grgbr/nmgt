@@ -1,4 +1,5 @@
-CFLAGS  := -Wall \
+CFLAGS  := -Wall -Wextra \
+           -fsanitize=address \
            $(shell env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
                        $(PKG_CONFIG) --cflags sysrepo libyang) \
            $(EXTRA_CFLAGS)

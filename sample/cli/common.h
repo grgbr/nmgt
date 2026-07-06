@@ -10,9 +10,22 @@
 #define CONFIG_CLI_LOG 1
 #define CONFIG_CLI_LOG_LEVEL 5
 
+/*
+ * Maximum size available to store a command line including the terminating NULL
+ * byte.
+ */
+#define CLI_LINE_MAX (1024U)
+
+/*
+ * Maximum size available to store a xpath including the terminating NULL byte.
+ */
+#define CLI_XPATH_MAX (128U)
+
 /******************************************************************************
  * Utilities
  ******************************************************************************/
+
+#define __cli_unused __attribute__((__unused__))
 
 #if defined(CONFIG_CLI_ASSERT)
 #include <assert.h>
@@ -109,6 +122,13 @@ cli_destroy_work(struct cli_work * work)
 	cli_free(work);
 }
 
+static inline void
+cli_releasen_destroy_work(struct cli_work *    work,
+                          struct cli_context * context __cli_unused)
+{
+	cli_destroy_work(work);
+}
+
 /******************************************************************************
  * Node handling
  ******************************************************************************/
@@ -132,6 +152,7 @@ struct cli_node {
 	struct cli_node *           next;
 	struct cli_node *           prev;
 	struct cli_node *           child;
+	struct cli_node *           parent;
 };
 
 /******************************************************************************

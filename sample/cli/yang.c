@@ -77,8 +77,16 @@ cli_lys_next_module(const struct cli_context * context, unsigned int * index)
 
 	mod = ly_ctx_get_module_iter(context->lyctx, index);
 	while (mod) {
-		if (mod->implemented && !sr_is_module_internal(mod))
+		if (mod->implemented &&
+		    mod->compiled->data &&
+		    !sr_is_module_internal(mod)) {
+			/*
+			 * Return external implemented modules that hold
+			 * top-level data node(s).
+			 */
 			break;
+		}
+
 		mod = ly_ctx_get_module_iter(context->lyctx, index);
 	}
 
@@ -96,8 +104,8 @@ cli_lys_walk_module(struct cli_context *      context,
 	cli_assert(module->compiled);
 	cli_assert(visit);
 
-	const struct lysc_node * root;
-	int                      ret = 0;
+	struct lysc_node * root;
+	int                ret = 0;
 
 	/*
 	 * Iterate over schema nodes only, i.e., not actions / rpcs, neither
@@ -145,11 +153,41 @@ cli_lysc_xpath(const struct lysc_node * node)
 	return xpath;
 }
 
+static struct lysc_node *
+cli_lysc_child(const struct lysc_node * node)
+{
+	cli_assert(node);
+
+	if (!(node->nodetype & (LYS_RPC | LYS_ACTION))) {
+		switch (node->nodetype) {
+		case LYS_CONTAINER:
+			return ((struct lysc_node_container *)node)->child;
+		case LYS_CHOICE:
+			return (struct lysc_node *)
+			((struct lysc_node_choice *)node)->cases;
+		case LYS_CASE:
+			return ((struct lysc_node_case *)node)->child;
+		case LYS_LIST:
+			return ((struct lysc_node_list *)node)->child;
+		case LYS_INPUT:
+		case LYS_OUTPUT:
+			return ((struct lysc_node_action_inout *)node)->child;
+		case LYS_NOTIF:
+			return ((struct lysc_node_notif *)node)->child;
+		default:
+			return NULL;
+		}
+	}
+	else
+		return &((struct lysc_node_action *)node)->input.node;
+}
+
+#warning Remove recursion
 int
-cli_lysc_walk_node(struct cli_context *     context,
-                   const struct lysc_node * node,
-                   cli_lysc_visit_fn *      visit,
-                   void *                   data)
+cli_lysc_walk_node(struct cli_context * context,
+                   struct lysc_node *   node,
+                   cli_lysc_visit_fn *  visit,
+                   void *               data)
 {
 	cli_assert_context(context);
 	cli_assert(node);
@@ -159,19 +197,19 @@ cli_lysc_walk_node(struct cli_context *     context,
 
 	ret = visit(context, node, CLI_WALK_PRE_EVT, data);
 	if (ret == CLI_WALK_CONT_RET) {
-		const struct lysc_node * child;
+		struct lysc_node * child;
 
-		LY_LIST_FOR(lysc_node_child(node), child) {
+		LY_LIST_FOR(cli_lysc_child(node), child) {
 			ret = cli_lysc_walk_node(context, child, visit, data);
 			if (ret < 0)
 				return ret;
 		}
 
 		ret = visit(context, node, CLI_WALK_POST_EVT, data);
+		cli_assert(ret <= 0);
 	}
 
-	cli_assert(ret <= 0);
-	return ret;
+	return (ret >= 0) ? 0 : ret;
 }
 
 LY_ERR
@@ -223,4 +261,42 @@ cli_lysc_print_nodeset_diag(const struct cli_context * context,
 	}
 
 	return LY_SUCCESS;
+}
+
+/******************************************************************************
+ * Libyang data handling
+ ******************************************************************************/
+
+int
+cli_lyd_load(const struct cli_context * context,
+             const char *               xpath,
+             unsigned int               depth,
+             sr_data_t **               data)
+{
+	cli_assert_context(context);
+	cli_assert(xpath);
+	cli_assert(strnlen(xpath, CLI_XPATH_MAX) < CLI_XPATH_MAX);
+	cli_assert(data);
+
+	int err;
+
+	err = sr_get_data(context->sess,
+	                  xpath,
+	                  depth,
+	                  0,
+	                  SR_OPER_DEFAULT,
+	                  data);
+	if (err != SR_ERR_OK)
+		return err;
+
+	if (!*data)
+		return SR_ERR_NOT_FOUND;
+
+	if (!(*data)->tree) {
+		sr_release_data(*data);
+		*data = NULL;
+		return SR_ERR_NOT_FOUND;
+	}
+
+	return SR_ERR_OK;
 }

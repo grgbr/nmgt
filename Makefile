@@ -13,7 +13,7 @@ BUILDDIR        := $(OUTBASE)/build
 STAGEDIR        := $(OUTBASE)/staging
 PATCHDIR        := $(CURDIR)/patch
 
-EXTRA_CFLAGS    := -g -O0
+EXTRA_CFLAGS    := -ggdb3 -O0
 EXTRA_LDFLAGS   := -Wl,-rpath,$(STAGEDIR)/lib
 PKG_CONFIG_PATH := $(STAGEDIR)/lib/pkgconfig:$(PKG_CONFIG_PATH)
 
