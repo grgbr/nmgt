@@ -25,11 +25,11 @@ $(DESTDIR)$(PREFIX)/bin/nmgmt-cli: $(BUILDDIR)/nmgmt-cli
 build: $(BUILDDIR)/nmgmt-schema \
 	$(BUILDDIR)/nmgmt-data \
 	$(BUILDDIR)/nmgmt-cli
-$(BUILDDIR)/nmgmt-schema: schema.c | $(BUILDDIR)/
+$(BUILDDIR)/nmgmt-schema: old/schema.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
-$(BUILDDIR)/nmgmt-data: data.c | $(BUILDDIR)/
+$(BUILDDIR)/nmgmt-data: old/data.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
-$(BUILDDIR)/nmgmt-cli: common.c yang.c cli.c | $(BUILDDIR)/
+$(BUILDDIR)/nmgmt-cli: cli.c xpath.c common.c yang.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(^) $(LDFLAGS)
 
 $(BUILDDIR)/:

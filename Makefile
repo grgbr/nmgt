@@ -42,7 +42,7 @@ include utils.mk
 all: sample pyang onmcli
 
 .PHONY: sample
-sample: $(STAMPDIR)/sysrepo $(STAMPDIR)/nghttp2 $(STAMPDIR)/netopeer2
+sample: $(STAMPDIR)/sysrepo #$(STAMPDIR)/nghttp2 $(STAMPDIR)/netopeer2
 	$(call make_cmd,$(@),PREFIX='$(STAGEDIR)' install)
 
 #

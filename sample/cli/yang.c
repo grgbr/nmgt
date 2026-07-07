@@ -146,7 +146,7 @@ cli_lysc_xpath(const struct lysc_node * node)
 {
 	char * xpath;
 
-	xpath = lysc_path(node, LYSC_PATH_LOG, NULL, 0);
+	xpath = lysc_path(node, LYSC_PATH_DATA, NULL, 0);
 	if (!xpath)
 		abort();
 
