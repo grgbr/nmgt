@@ -276,5 +276,3 @@ static const struct cli_node_ops cli_schema_cmd_ops = {
 
 static struct cli_node cli_schema_cmd = CLI_NODE_SETUP(cli_schema_cmd,
                                                        &cli_schema_cmd_ops);
-
-

@@ -1,7 +1,7 @@
 #ifndef _CLI_YANG_H
 #define _CLI_YANG_H
 
-#include "common.h"
+#include "cli.h"
 
 /******************************************************************************
  * Libyang utils
