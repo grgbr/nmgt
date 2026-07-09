@@ -18,6 +18,33 @@ struct cli_find_work {
 	size_t          len;
 };
 
+static void
+cli_find_show_relpath(const struct cli_dir * directory,
+                      const struct cli_dir * ancestor)
+{
+	char * path;
+
+	path = cli_dir_relpath(directory, ancestor);
+	cli_assert(path);
+
+	printf("%s\n", path);
+
+	cli_free(path);
+}
+
+static void
+cli_find_show_abspath(const struct cli_dir * directory)
+{
+	char * path;
+
+	path = cli_dir_abspath(directory);
+	cli_assert(path);
+
+	printf("%s\n", path);
+
+	cli_free(path);
+}
+
 static int
 cli_find_show_dir(struct cli_dir *    dir,
                   enum cli_walk_event event,
@@ -25,44 +52,73 @@ cli_find_show_dir(struct cli_dir *    dir,
 {
 	cli_dir_assert(dir);
 
-	int * depth = data;
-
 	switch (event) {
 	case CLI_WALK_PRE_EVT:
-#warning TODO: print whole path !
-		printf("%*.*s%s\n", *depth * 4, *depth * 4, "", dir->name);
-		*depth = *depth + 1;
-		return CLI_WALK_CONT_RET;
+		if (data)
+			cli_find_show_relpath(dir, data);
+		else
+			cli_find_show_abspath(dir);
+		break;
 
 	case CLI_WALK_POST_EVT:
-		*depth = *depth - 1;
-		return CLI_WALK_CONT_RET;
+		break;
 
 	default:
 		cli_assert(0);
 	}
+
+	return CLI_WALK_CONT_RET;
 }
+
+struct cli_find_show {
+	const struct cli_dir * ancestor;
+	char *                 path;
+	size_t                 avail;
+};
 
 static int
 cli_find_exec_work(const struct cli_work * work,
                    struct cli_context *    context)
 {
 	const struct cli_find_work * wk = (const struct cli_find_work *)work;
-	struct cli_dir *             dir;
-	int                          depth = 0;
+	const struct cli_dir *       dir;
+	char *                       path;
+	struct cli_find_show         show;
 
 	cli_assert(!wk->path || wk->len);
+
+	/*
+	 * Allocate a memory region large enough to hold the longest path
+	 * possible.
+	 */
+	path = cli_malloc(CLI_PATH_MAX);
+	cli_assert(path);
 
 	/* Get a pointer to the current working menu directory. */
 	dir = cli_cwd(context);
 
 	if (wk->path) {
+		cli_assert(wk->path[0] != '\0');
+
 		int ret;
 
+		FINISH ME
+
+		if (wk->path[0] != '/') {
+			memcpy(path, wk->path, wk->len);
+			path[wk->len] = '/';
+			show.anc = dir;
+			show.path = path;
+			show.off = wk->len + 1;
+		}
+		else {
+			show.anc = NULL;
+			show.path = path;
+			show.off = 0;
+		}
+
 		/* Search for a menu directory matching the given path. */
-		ret = cli_dir_search((const struct cli_dir **)&dir,
-		                     wk->path,
-		                     wk->len);
+		ret = cli_dir_search(&dir, wk->path, wk->len);
 		if (ret) {
 			cli_log("find: '%s': invalid path: %s.",
 			        wk->path,
@@ -70,12 +126,17 @@ cli_find_exec_work(const struct cli_work * work,
 			return ret;
 		}
 	}
+	else {
+		show.anc = dir;
+		show.path = path;
+		show.left = CLI_PATH_MAX;
+	}
 
 	/*
 	 * Given the directory descriptor found above, display its children
 	 * directory entries.
 	 */
-	cli_dir_walk(dir, cli_find_show_dir, &depth);
+	cli_dir_walk((struct cli_dir *)dir, cli_find_show_dir, &show);
 
 	return 0;
 }
@@ -100,7 +161,7 @@ cli_find_parse_cmd(const struct cli_cmd * command __cli_unused,
 		struct cli_context *   ctx = data;
 
 		if (argc == 2) {
-			ret = cli_dir_ispath_valid(argv[1]);
+			ret = cli_path_isok(argv[1]);
 			if (ret < 0) {
 				cli_log("find: invalid specified: %s.",
 				        strerror(-ret));

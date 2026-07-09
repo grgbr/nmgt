@@ -1,15 +1,10 @@
 #ifndef _CLI_DIR_H
 #define _CLI_DIR_H
 
-#include "common.h"
+#include "path.h"
 #include <string.h>
 
 struct cli_cmd;
-
-#define CLI_DIR_NAME_MAX (128)
-#if CLI_DIR_NAME_MAX <= 64
-#error Directory name length MUST conform to section 6.2 of RFC 7950 !
-#endif
 
 #define CLI_DIR_PATH_MAX (512)
 #if CLI_DIR_PATH_MAX > CLI_LINE_MAX
@@ -18,12 +13,9 @@ struct cli_cmd;
 #define CLI_DIR_NAME_MAX CLI_LINE_MAX
 #endif
 
-extern ssize_t
-cli_dir_ispath_valid(const char * path);
-
 struct cli_dir {
 	/* This directory path component. */
-	char                     name[CLI_DIR_NAME_MAX];
+	char                     name[CLI_PATH_NAME_MAX];
 	/* Next directory entry sibling. */
 	struct cli_dir *         next;
 	/* Previous directory entry sibling. */
@@ -43,13 +35,13 @@ struct cli_dir {
 #define cli_dir_assert(_dir) \
 	cli_assert(_dir); \
 	cli_assert(((_dir)->name[0] != '\0') && \
-	           (strnlen((_dir)->name, CLI_DIR_NAME_MAX) < \
-	            CLI_DIR_NAME_MAX)); \
+	           (strnlen((_dir)->name, CLI_PATH_NAME_MAX) < \
+	            CLI_PATH_NAME_MAX)); \
 	cli_assert(!(_dir)->hcmd || (_dir)->tcmd)
 
 /*
  * TODO:
- * static_assert(sizeof(_name) <= CLI_DIR_NAME_MAX)
+ * static_assert(sizeof(_name) <= CLI_PATH_NAME_MAX)
  * see static_assert(3)
  */
 #define CLI_DIR_INIT(_dir, _name) \
@@ -91,13 +83,44 @@ cli_dir_walk_safe(struct cli_dir *   directory,
                   cli_dir_visit_fn * visit,
                   void *             data);
 
+/*
+ * For the directory given in argument, compute a path relavite to an ancestor
+ * directory.
+ *
+ * @directory:  Directory to compute the path for.
+ * @ancestor:   An ancestor directory of @directory.
+ * @path:       Pre-allocated string where to put the computed absolute path.
+ * @size:       Size of @path including the terminating NULL byte.
+ *
+ * @return: Length of computed relative path, excluding the terminating NULL
+ *          byte.
+ */
+extern ssize_t
+cli_dir_relpath(const struct cli_dir * directory,
+                const struct cli_dir * ancestor,
+                char *                 path,
+                size_t                 size);
+
+/*
+ * Compute absolute path for the directory given in argument.
+ *
+ * @directory:  Directory to compute the path for.
+ * @path:       Pre-allocated string where to put the computed absolute path.
+ * @size:       Size of @path including the terminating NULL byte.
+ *
+ * @return: Length of computed absolute path, excluding the terminating NULL
+ *          byte.
+ */
+extern ssize_t
+cli_dir_abspath(const struct cli_dir * directory, char * path, size_t size);
+
 extern char *
 cli_dir_xpath(const struct cli_dir * directory);
 
 extern int
 cli_dir_search(const struct cli_dir ** directory,
                const char *            path,
-               size_t                  length);
+               size_t                  size);
 
 extern int
 cli_dir_parse_cmd(const struct cli_dir * directory,

@@ -53,6 +53,18 @@ cli_malloc(size_t size)
 	return data;
 }
 
+void *
+cli_realloc(void * data, size_t size)
+{
+	cli_assert(size);
+
+	data = realloc(data, size);
+	if (!data)
+		abort();
+
+	return data;
+}
+
 char *
 cli_strdup(const char * string)
 {

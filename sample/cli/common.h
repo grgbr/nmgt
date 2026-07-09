@@ -61,14 +61,17 @@ cli_assert_args(int argc __cli_unused, const char * const argv[] __cli_unused)
 extern void *
 cli_malloc(size_t size);
 
+extern void *
+cli_realloc(void * data, size_t size);
+
+extern char *
+cli_strdup(const char * string);
+
 static inline void
 cli_free(void * data)
 {
 	free(data);
 }
-
-extern char *
-cli_strdup(const char * string);
 
 #define CLI_WALK_CONT_RET (0)
 #define CLI_WALK_SKIP_RET (1)

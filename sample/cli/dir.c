@@ -1,22 +1,7 @@
 #include "dir.h"
 #include "cmd.h"
 #include "yang.h"
-#include <ctype.h>
 #include <errno.h>
-
-ssize_t
-cli_dir_ispath_valid(const char * path)
-{
-	cli_assert(path);
-
-	size_t len;
-
-	len = strnlen(path, CLI_DIR_PATH_MAX);
-	if (len >= CLI_DIR_PATH_MAX)
-		return -ENAMETOOLONG;
-
-	return len;
-}
 
 static int
 cli_dir_walk_recurs(struct cli_dir *   directory,
@@ -118,6 +103,67 @@ cli_dir_walk_safe(struct cli_dir *   directory,
 	return 0;
 }
 
+ssize_t
+cli_dir_relpath(const struct cli_dir * directory,
+                const struct cli_dir * ancestor,
+                char *                 path,
+                size_t                 size)
+{
+	cli_dir_assert(directory);
+	cli_dir_assert(ancestor);
+	cli_assert(directory != ancestor);
+	cli_assert(path);
+	cli_assert(size);
+	cli_assert(size <= CLI_PATH_MAX);
+
+	struct cli_path_stack stk;
+
+	cli_path_init_stack(&stk);
+
+	while (directory != ancestor) {
+		cli_dir_assert(directory);
+
+		cli_path_push_comp(&stk,
+		                   directory->name,
+		                   strnlen(directory->name, CLI_PATH_NAME_MAX));
+		directory = directory->parent;
+	}
+
+	size = cli_path_mkrel_from_stack(&stk, path, size);
+
+	cli_path_fini_stack(&stk);
+
+	return size;
+}
+
+ssize_t
+cli_dir_abspath(const struct cli_dir * directory, char * path, size_t size)
+{
+	cli_dir_assert(directory);
+	cli_assert(path);
+	cli_assert(size);
+	cli_assert(size <= CLI_PATH_MAX);
+
+	struct cli_path_stack stk;
+
+	cli_path_init_stack(&stk);
+
+	while (directory->parent) {
+		cli_dir_assert(directory);
+
+		cli_path_push_comp(&stk,
+		                   directory->name,
+		                   strnlen(directory->name, CLI_PATH_NAME_MAX));
+		directory = directory->parent;
+	}
+
+	size = cli_path_mkabs_from_stack(&stk, path, size);
+
+	cli_path_fini_stack(&stk);
+
+	return size;
+}
+
 char *
 cli_dir_xpath(const struct cli_dir * directory)
 {
@@ -129,7 +175,7 @@ cli_dir_xpath(const struct cli_dir * directory)
  * To keep compliant with YANG identifiers, path component name :
  * - starts with a [a-zA-Z_] character ;
  * - is followed by zero or more [a-zA-Z0-9_-] characters ;
- * - and its entire length may be composed of up to (CLI_DIR_NAME_MAX - 1)
+ * - and its entire length may be composed of up to (CLI_PATH_NAME_MAX - 1)
  *   characters.
  * See section 6.2 of RFC 7950 for more informations.
  */
@@ -160,7 +206,7 @@ cli_dir_next_path_comp(char ** path)
 		len = 1;
 
 		/* Probe component last character. */
-		while ((len < CLI_DIR_NAME_MAX) &&
+		while ((len < CLI_PATH_NAME_MAX) &&
 		       (isalnum(ptr[0]) ||
 		        (ptr[0] == '_') ||
 		        (ptr[0] == '-'))) {
@@ -168,7 +214,7 @@ cli_dir_next_path_comp(char ** path)
 			len++;
 		}
 
-		if (len == CLI_DIR_NAME_MAX)
+		if (len == CLI_PATH_NAME_MAX)
 			/* Component too long... */
 			return -ENAMETOOLONG;
 
@@ -221,8 +267,8 @@ cli_dir_search(const struct cli_dir ** directory,
 	cli_dir_assert(*directory);
 	cli_assert(path);
 	cli_assert(length);
-	cli_assert(length < CLI_DIR_PATH_MAX);
-	cli_assert(cli_dir_ispath_valid(path) == (ssize_t)length);
+	cli_assert(length < CLI_PATH_MAX);
+	cli_assert(cli_path_isok(path) == (ssize_t)length);
 
 	const struct cli_dir * dir = *directory;
 	char *                 tmp;
@@ -372,8 +418,8 @@ cli_dir_init(struct cli_dir * directory, const char * name)
 
 	size_t len;
 
-	len = strnlen(name, CLI_DIR_NAME_MAX);
-	if (len >= CLI_DIR_NAME_MAX)
+	len = strnlen(name, CLI_PATH_NAME_MAX);
+	if (len >= CLI_PATH_NAME_MAX)
 		return -ENAMETOOLONG;
 
 	memcpy(directory->name, name, len + 1);
