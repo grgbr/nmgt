@@ -2,6 +2,7 @@
 #define _CLI_DIR_H
 
 #include "path.h"
+#include <stdbool.h>
 #include <string.h>
 
 struct cli_cmd;
@@ -56,6 +57,14 @@ struct cli_dir {
 		.lysc   = NULL, \
 	}
 
+static inline bool
+cli_dir_has_child(const struct cli_dir * directory)
+{
+	cli_dir_assert(directory);
+
+	return !!directory->child;
+}
+
 #define cli_dir_foreach_child(_dir, _child) \
 	for (_child = (_dir)->child; _child; _child = (_child)->next)
 
@@ -63,25 +72,6 @@ struct cli_dir {
 	for (_child = (_dir)->child; \
 	     _child && (_tmp = (_child)->next, 1); \
 	     _child = _tmp)
-
-typedef int cli_dir_visit_fn(struct cli_dir *, enum cli_walk_event, void *);
-
-/*
- * Perform a depth-first traversal of directory tree which root is given as the
- * `directory' argument.
- * 
- * Warning ! The visit() function is not called for the root directory passed in
- *           argument.
- */
-extern int
-cli_dir_walk(struct cli_dir *   directory,
-             cli_dir_visit_fn * visit,
-             void *             data);
-
-extern int
-cli_dir_walk_safe(struct cli_dir *   directory,
-                  cli_dir_visit_fn * visit,
-                  void *             data);
 
 /*
  * For the directory given in argument, compute a path relavite to an ancestor
@@ -116,6 +106,26 @@ cli_dir_abspath(const struct cli_dir * directory, char * path, size_t size);
 
 extern char *
 cli_dir_xpath(const struct cli_dir * directory);
+
+
+typedef int cli_dir_visit_fn(struct cli_dir *, enum cli_walk_event, void *);
+
+/*
+ * Perform a depth-first traversal of directory tree which root is given as the
+ * `directory' argument.
+ * 
+ * Warning ! The visit() function is not called for the root directory passed in
+ *           argument.
+ */
+extern int
+cli_dir_walk(struct cli_dir *   directory,
+             cli_dir_visit_fn * visit,
+             void *             data);
+
+extern int
+cli_dir_walk_safe(struct cli_dir *   directory,
+                  cli_dir_visit_fn * visit,
+                  void *             data);
 
 extern int
 cli_dir_search(const struct cli_dir ** directory,

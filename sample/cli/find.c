@@ -18,31 +18,38 @@ struct cli_find_work {
 	size_t          len;
 };
 
-static void
-cli_find_show_relpath(const struct cli_dir * directory,
-                      const struct cli_dir * ancestor)
-{
-	char * path;
-
-	path = cli_dir_relpath(directory, ancestor);
-	cli_assert(path);
-
-	printf("%s\n", path);
-
-	cli_free(path);
-}
+struct cli_find_show {
+	const struct cli_dir * anc;
+	char *                 path;
+	size_t                 off;
+};
 
 static void
-cli_find_show_abspath(const struct cli_dir * directory)
+cli_find_show_dir_path(const struct cli_dir *       directory,
+                       const struct cli_find_show * show)
 {
-	char * path;
+	ssize_t ret;
 
-	path = cli_dir_abspath(directory);
-	cli_assert(path);
+	if (show->anc) {
+		cli_assert((show->off + 1) < CLI_PATH_MAX);
 
-	printf("%s\n", path);
+		ret = cli_dir_relpath(directory,
+		                      show->anc,
+		                      &show->path[show->off],
+		                      CLI_PATH_MAX - show->off);
+	}
+	else
+		ret = cli_dir_abspath(directory,
+		                      show->path,
+		                      CLI_PATH_MAX);
 
-	cli_free(path);
+	cli_assert(ret);
+	if (ret > 0) {
+		printf("%s\n", show->path);
+		return;
+	}
+
+	cli_log("find: failed to show some path: %s\n", strerror(-ret));
 }
 
 static int
@@ -54,11 +61,7 @@ cli_find_show_dir(struct cli_dir *    dir,
 
 	switch (event) {
 	case CLI_WALK_PRE_EVT:
-		if (data)
-			cli_find_show_relpath(dir, data);
-		else
-			cli_find_show_abspath(dir);
-		break;
+		cli_find_show_dir_path(dir, data);
 
 	case CLI_WALK_POST_EVT:
 		break;
@@ -70,52 +73,23 @@ cli_find_show_dir(struct cli_dir *    dir,
 	return CLI_WALK_CONT_RET;
 }
 
-struct cli_find_show {
-	const struct cli_dir * ancestor;
-	char *                 path;
-	size_t                 avail;
-};
-
 static int
 cli_find_exec_work(const struct cli_work * work,
                    struct cli_context *    context)
 {
 	const struct cli_find_work * wk = (const struct cli_find_work *)work;
-	const struct cli_dir *       dir;
-	char *                       path;
-	struct cli_find_show         show;
+	char *                       path = cli_malloc(CLI_PATH_MAX);
+	struct cli_find_show         show = { .path = path };
+	const struct cli_dir *       dir = cli_cwd(context);
+	int                          ret;
 
 	cli_assert(!wk->path || wk->len);
 
-	/*
-	 * Allocate a memory region large enough to hold the longest path
-	 * possible.
-	 */
-	path = cli_malloc(CLI_PATH_MAX);
-	cli_assert(path);
-
-	/* Get a pointer to the current working menu directory. */
-	dir = cli_cwd(context);
-
 	if (wk->path) {
 		cli_assert(wk->path[0] != '\0');
-
-		int ret;
-
-		FINISH ME
-
-		if (wk->path[0] != '/') {
-			memcpy(path, wk->path, wk->len);
-			path[wk->len] = '/';
-			show.anc = dir;
-			show.path = path;
-			show.off = wk->len + 1;
-		}
-		else {
-			show.anc = NULL;
-			show.path = path;
-			show.off = 0;
-		}
+		cli_assert(wk->len);
+		cli_assert((wk->len) < CLI_PATH_MAX);
+		cli_assert(wk->path[wk->len] == '\0');
 
 		/* Search for a menu directory matching the given path. */
 		ret = cli_dir_search(&dir, wk->path, wk->len);
@@ -123,22 +97,45 @@ cli_find_exec_work(const struct cli_work * work,
 			cli_log("find: '%s': invalid path: %s.",
 			        wk->path,
 			        strerror(-ret));
-			return ret;
+			goto free;
 		}
+
+		if (!cli_dir_has_child(dir))
+			goto free;
+
+		if (wk->path[0] != '/') {
+			if ((wk->len + 1) >= CLI_PATH_MAX) {
+				cli_log("find: failed to show some path: %s\n",
+				        strerror(ENAMETOOLONG));
+				goto free;
+			}
+
+			memcpy(path, wk->path, wk->len + 1);
+			path[wk->len] = '/';
+			show.anc = dir;
+			show.off = wk->len + 1;
+		}
+		else
+			show.anc = NULL;
 	}
 	else {
+		/*
+		 * Show directory entries relative to current working directory.
+		 */
 		show.anc = dir;
-		show.path = path;
-		show.left = CLI_PATH_MAX;
+		show.off = 0;
 	}
 
 	/*
 	 * Given the directory descriptor found above, display its children
 	 * directory entries.
 	 */
-	cli_dir_walk((struct cli_dir *)dir, cli_find_show_dir, &show);
+	ret = cli_dir_walk((struct cli_dir *)dir, cli_find_show_dir, &show);
 
-	return 0;
+free:
+	cli_free(path);
+
+	return ret;
 }
 
 static const struct cli_work_ops cli_find_work_ops = {

@@ -74,7 +74,7 @@ cli_xpath_parse_cmd(const struct cli_cmd * command __cli_unused,
 		struct cli_context *    ctx = data;
 
 		if (argc == 2) {
-			ret = cli_dir_ispath_valid(argv[1]);
+			ret = cli_path_isok(argv[1]);
 			if (ret < 0) {
 				cli_log("xpath: invalid path: %s.",
 				        strerror(-ret));
