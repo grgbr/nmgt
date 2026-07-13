@@ -57,6 +57,13 @@ struct cli_dir {
 		.lysc   = NULL, \
 	}
 
+static inline const char *
+cli_dir_strerror(int error)
+{
+	return (error == ENOENT) ? "no such directory"
+	                         : cli_path_strerror(error);
+}
+
 static inline bool
 cli_dir_has_child(const struct cli_dir * directory)
 {
@@ -86,10 +93,10 @@ cli_dir_has_child(const struct cli_dir * directory)
  *          byte.
  */
 extern ssize_t
-cli_dir_relpath(const struct cli_dir * directory,
-                const struct cli_dir * ancestor,
-                char *                 path,
-                size_t                 size);
+cli_dir_mkrel(const struct cli_dir * directory,
+              const struct cli_dir * ancestor,
+              char *                 path,
+              size_t                 size);
 
 /*
  * Compute absolute path for the directory given in argument.
@@ -102,7 +109,7 @@ cli_dir_relpath(const struct cli_dir * directory,
  *          byte.
  */
 extern ssize_t
-cli_dir_abspath(const struct cli_dir * directory, char * path, size_t size);
+cli_dir_mkabs(const struct cli_dir * directory, char * path, size_t size);
 
 extern char *
 cli_dir_xpath(const struct cli_dir * directory);
@@ -128,9 +135,11 @@ cli_dir_walk_safe(struct cli_dir *   directory,
                   void *             data);
 
 extern int
-cli_dir_search(const struct cli_dir ** directory,
-               const char *            path,
-               size_t                  size);
+cli_dir_search_from_path(const struct cli_dir ** directory,
+                         const struct cli_path * path);
+
+extern int
+cli_dir_search(const struct cli_dir ** directory, const char * path);
 
 extern int
 cli_dir_parse_cmd(const struct cli_dir * directory,
@@ -144,6 +153,9 @@ cli_dir_add_child(struct cli_dir * directory, struct cli_dir * child);
 extern void
 cli_dir_add_cmd(struct cli_dir * directory, struct cli_cmd * command);
 
+extern void
+_cli_dir_init(struct cli_dir * directory, const char * name, size_t length);
+
 extern int
 cli_dir_init(struct cli_dir * directory, const char * name);
 
@@ -155,5 +167,41 @@ cli_dir_create(const char * name);
 
 extern void
 cli_dir_destroy(struct cli_dir * directory);
+
+/******************************************************************************
+ * Directory search logic for commands usage.
+ ******************************************************************************/
+
+struct cli_context;
+
+struct cli_dir_search {
+	struct cli_path path;
+	const char *    orig;
+};
+
+extern int
+cli_dir_exec_search(const struct cli_dir_search * search,
+                    const struct cli_dir **       directory,
+                    const struct cli_context *    context);
+
+extern int
+cli_dir_parse_search(struct cli_dir_search * search, const char * path);
+
+static inline void
+cli_dir_init_search(struct cli_dir_search * search)
+{
+	cli_assert(search);
+
+	cli_path_init(&search->path);
+	search->orig = NULL;
+}
+
+static inline void
+cli_dir_fini_search(struct cli_dir_search * search)
+{
+	cli_assert(search);
+
+	cli_path_fini(&((struct cli_dir_search *)search)->path);
+}
 
 #endif  /* _CLI_DIR_H */

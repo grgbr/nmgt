@@ -104,10 +104,10 @@ cli_dir_walk_safe(struct cli_dir *   directory,
 }
 
 ssize_t
-cli_dir_relpath(const struct cli_dir * directory,
-                const struct cli_dir * ancestor,
-                char *                 path,
-                size_t                 size)
+cli_dir_mkrel(const struct cli_dir * directory,
+              const struct cli_dir * ancestor,
+              char *                 path,
+              size_t                 size)
 {
 	cli_dir_assert(directory);
 	cli_dir_assert(ancestor);
@@ -116,52 +116,54 @@ cli_dir_relpath(const struct cli_dir * directory,
 	cli_assert(size);
 	cli_assert(size <= CLI_PATH_MAX);
 
-	struct cli_path_stack stk;
+	struct cli_path pth;
+	ssize_t         len;
 
-	cli_path_init_stack(&stk);
+	cli_path_init(&pth);
 
-	while (directory != ancestor) {
+	do {
 		cli_dir_assert(directory);
 
-		cli_path_push_comp(&stk,
+		cli_path_push_head(&pth,
 		                   directory->name,
 		                   strnlen(directory->name, CLI_PATH_NAME_MAX));
 		directory = directory->parent;
-	}
+	} while (directory != ancestor);
 
-	size = cli_path_mkrel_from_stack(&stk, path, size);
+	len = cli_path_mkrel(&pth, path, size);
 
-	cli_path_fini_stack(&stk);
+	cli_path_fini(&pth);
 
-	return size;
+	return len;
 }
 
 ssize_t
-cli_dir_abspath(const struct cli_dir * directory, char * path, size_t size)
+cli_dir_mkabs(const struct cli_dir * directory, char * path, size_t size)
 {
 	cli_dir_assert(directory);
 	cli_assert(path);
 	cli_assert(size);
 	cli_assert(size <= CLI_PATH_MAX);
 
-	struct cli_path_stack stk;
+	struct cli_path pth;
+	ssize_t         len;
 
-	cli_path_init_stack(&stk);
+	cli_path_init(&pth);
 
 	while (directory->parent) {
 		cli_dir_assert(directory);
 
-		cli_path_push_comp(&stk,
+		cli_path_push_head(&pth,
 		                   directory->name,
 		                   strnlen(directory->name, CLI_PATH_NAME_MAX));
 		directory = directory->parent;
 	}
 
-	size = cli_path_mkabs_from_stack(&stk, path, size);
+	len = cli_path_mkabs(&pth, path, size);
 
-	cli_path_fini_stack(&stk);
+	cli_path_fini(&pth);
 
-	return size;
+	return len;
 }
 
 char *
@@ -171,177 +173,95 @@ cli_dir_xpath(const struct cli_dir * directory)
 	                         : cli_strdup("/");
 }
 
-/*
- * To keep compliant with YANG identifiers, path component name :
- * - starts with a [a-zA-Z_] character ;
- * - is followed by zero or more [a-zA-Z0-9_-] characters ;
- * - and its entire length may be composed of up to (CLI_PATH_NAME_MAX - 1)
- *   characters.
- * See section 6.2 of RFC 7950 for more informations.
- */
-static ssize_t
-cli_dir_next_path_comp(char ** path)
-{
-	cli_assert(path);
-	cli_assert(*path);
-
-	char * ptr = *path;
-	char * start;
-	size_t len;
-
-	/* Skip leading '/' duplicates. */
-	while (ptr[0] == '/')
-		ptr++;
-
-	if (ptr[0] == '\0')
-		return 0;
-
-	if (isalpha(ptr[0]) || (ptr[0] != '_')) {
-		/*
-		 * Found a valid first component character: parse the component :
-		 * - save a pointer to the begining of the component and
-		 * - initialize its length computation.
-		 */
-		start = ptr++;
-		len = 1;
-
-		/* Probe component last character. */
-		while ((len < CLI_PATH_NAME_MAX) &&
-		       (isalnum(ptr[0]) ||
-		        (ptr[0] == '_') ||
-		        (ptr[0] == '-'))) {
-			ptr++;
-			len++;
-		}
-
-		if (len == CLI_PATH_NAME_MAX)
-			/* Component too long... */
-			return -ENAMETOOLONG;
-
-		if (ptr[0] == '/')
-			goto delim;
-		else if (ptr[0] == '\0')
-			goto valid;
-	}
-	else if (ptr[0] == '.') {
-		start = ptr++;
-		len = 1;
-
-		if (ptr[0] == '.') {
-			ptr++;
-			len = 2;
-			if (ptr[0] == '/')
-				goto delim;
-			else if (ptr[0] == '\0')
-				goto valid;
-		}
-		else if (ptr[0] == '/')
-			goto delim;
-		else if (ptr[0] == '\0')
-			goto valid;
-	}
-
-	return -EINVAL;
-
-delim:
-	/* Component delimiter found: overwrite with a terminating NULL byte */
-	ptr[0] = '\0';
-	ptr++;
-	len++;
-valid:
-	/*
-	 * Valid component found:
-	 * - make path point to the component start and
-	 * - return its length.
-	 */
-	*path = start;
-	return (ssize_t)len;
-}
-
 int
-cli_dir_search(const struct cli_dir ** directory,
-               const char *            path,
-               size_t                  length)
+cli_dir_search_from_path(const struct cli_dir ** directory,
+                         const struct cli_path * path)
 {
 	cli_assert(directory);
 	cli_dir_assert(*directory);
 	cli_assert(path);
-	cli_assert(length);
-	cli_assert(length < CLI_PATH_MAX);
-	cli_assert(cli_path_isok(path) == (ssize_t)length);
 
+	const struct cli_dir *       dir = *directory;
+	unsigned int                 c;
+	unsigned int                 cnt;
+	const struct cli_path_comp * comp;
+
+	cli_path_foreach_comp(path, c, cnt, comp) {
+		if (cli_path_comp_kind(comp) != CLI_PATH_UPPER_COMP_KIND) {
+			cli_assert(cli_path_comp_kind(comp) ==
+			           CLI_PATH_REG_COMP_KIND);
+			break;
+		}
+
+		if (dir->parent)
+			dir = dir->parent;
+	}
+
+	cli_path_foreach_comp_from(path, c, cnt, comp) {
+		/* Iterate over each path component... */
+		const struct cli_dir * child;
+		bool                   found = false;
+
+		/*
+		 * ... and search a child directory which name matches the
+		 * current component.
+		 */
+		cli_dir_foreach_child(dir, child) {
+			if (!cli_path_comp_ncmp(comp,
+			                        child->name,
+			                        strlen(child->name))) {
+				dir = child;
+				found = true;
+				break;
+			}
+		}
+
+		if (!found) {
+			/*
+			 * No matching child directory found: stop the search
+			 * since the given path does not exist.
+			 */
+			return -ENOENT;
+		}
+	}
+
+	*directory = dir;
+
+	return 0;
+}
+
+int
+cli_dir_search(const struct cli_dir ** directory, const char * path)
+{
+	cli_assert(directory);
+	cli_dir_assert(*directory);
+	cli_assert(path);
+
+	struct cli_path        pth;
 	const struct cli_dir * dir = *directory;
-	char *                 tmp;
-	char *                 comp;
-	ssize_t                cnt;
+	int                    ret;
 
-	/* Find directory root if absolute path search is requested. */
+	cli_path_init(&pth);
+
+	ret = cli_path_parse(&pth, path);
+	if (ret)
+		goto fini;
+
 	if (path[0] == '/') {
 		while (dir->parent)
 			dir = dir->parent;
 	}
 
-	/* Allocate a temporary duplicate of `path' string. */
-	tmp = cli_malloc(length + 1);
-	memcpy(tmp, path, length + 1);
+	ret = cli_dir_search_from_path(&dir, &pth);
+	if (ret)
+		goto fini;
 
-	/*
-	 * Now iterate over components and locate matching directories along the
-	 * path.
-	 */
-	comp = tmp;
-	cnt = cli_dir_next_path_comp(&comp);
-	while (cnt > 0) {
-		cli_assert(comp >= tmp);
-		cli_assert(&comp[cnt] <= &tmp[length]);
+	*directory = dir;
 
-		const struct cli_dir * child;
+fini:
+	cli_path_fini(&pth);
 
-		if (comp[0] != '.') {
-			bool found = false;
-
-			/*
-			 * Search a child directory which name matches the
-			 * current component.
-			 */
-			cli_dir_foreach_child(dir, child) {
-				if (!strcmp(comp, child->name)) {
-					dir = child;
-					found = true;
-					break;
-				}
-			}
-
-			if (!found) {
-				/*
-				 * No matching child directory found: stop the
-				 * search since the given path does not exist.
-				 */
-				cnt = -ENOENT;
-				goto free;
-			}
-		}
-		else if ((cnt >= 2) && (comp[1] == '.')) {
-			if (dir->parent)
-				dir = dir->parent;
-		}
-
-		/*
-		 * Jump to character right after valid component end and parse
-		 * next one.
-		 */
-		comp = &comp[cnt];
-		cnt = cli_dir_next_path_comp(&comp);
-	}
-
-	if (!cnt)
-		/* End of path parsing and directory found. */
-		*directory = dir;
-
-free:
-	cli_free(tmp);
-
-	return cnt;
+	return ret;
 }
 
 int
@@ -354,7 +274,7 @@ cli_dir_parse_cmd(const struct cli_dir * directory,
 	cli_assert_args(argc, argv);
 
 	const struct cli_cmd * cmd;
-	int                    ret = -EINVAL;
+	int                    ret = 0;
 
 	cli_cmd_foreach(directory->hcmd, cmd) {
 		cli_cmd_assert(cmd);
@@ -367,7 +287,12 @@ cli_dir_parse_cmd(const struct cli_dir * directory,
 	if (ret == argc)
 		return 0;
 
-	return (ret < 0) ? ret : -EINVAL;
+	if (!ret) {
+		cli_log("'%s': no such command.", argv[0]);
+		return -EINVAL;
+	}
+
+	return ret;
 }
 
 void
@@ -410,19 +335,15 @@ cli_dir_add_cmd(struct cli_dir * directory, struct cli_cmd * command)
 	}
 }
 
-int
-cli_dir_init(struct cli_dir * directory, const char * name)
+void
+_cli_dir_init(struct cli_dir * directory, const char * name, size_t length)
 {
 	cli_assert(directory);
 	cli_assert(name);
+	cli_assert(length);
+	cli_assert(length < CLI_PATH_NAME_MAX);
 
-	size_t len;
-
-	len = strnlen(name, CLI_PATH_NAME_MAX);
-	if (len >= CLI_PATH_NAME_MAX)
-		return -ENAMETOOLONG;
-
-	memcpy(directory->name, name, len + 1);
+	memcpy(directory->name, name, length + 1);
 	directory->next = NULL;
 	directory->prev = directory;
 	directory->child = NULL;
@@ -430,6 +351,23 @@ cli_dir_init(struct cli_dir * directory, const char * name)
 	directory->hcmd = NULL;
 	directory->tcmd = NULL;
 	directory->lysc = NULL;
+}
+
+int
+cli_dir_init(struct cli_dir * directory, const char * name)
+{
+	cli_assert(directory);
+	cli_assert(name);
+
+	size_t len;
+	int    ret;
+
+	len = strnlen(name, CLI_PATH_NAME_MAX);
+	ret = cli_path_comp_isok(name, len);
+	if (ret)
+		return ret;
+
+	_cli_dir_init(directory, name, len);
 
 	return 0;
 }
@@ -467,4 +405,54 @@ cli_dir_destroy(struct cli_dir * directory)
 {
 	cli_dir_fini(directory);
 	cli_free(directory);
+}
+
+/******************************************************************************
+ * Directory search logic for commands usage.
+ ******************************************************************************/
+
+int
+cli_dir_exec_search(const struct cli_dir_search * search,
+                    const struct cli_dir **       directory,
+                    const struct cli_context *    context)
+{
+	cli_assert(search);
+	cli_assert(directory);
+	cli_assert(context);
+
+	const struct cli_dir * dir = cli_cwd(context);
+
+	if (cli_path_comp_count(&search->path)) {
+		int ret;
+
+		cli_assert(search->orig);
+		if (search->orig[0] == '/')
+			dir = &context->root;
+
+		ret = cli_dir_search_from_path(&dir, &search->path);
+		if (ret)
+			return ret;
+	}
+
+	*directory = dir;
+
+	return 0;
+}
+
+int
+cli_dir_parse_search(struct cli_dir_search * search, const char * path)
+{
+	cli_assert(search);
+
+	ssize_t ret = 0;
+
+	if (path && (*path != '\0')) {
+		ret = cli_path_parse(&search->path, path);
+		if (ret)
+			return ret;
+	}
+
+	search->orig = path;
+
+	return 0;
 }

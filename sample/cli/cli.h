@@ -12,7 +12,7 @@
 struct cli_work;
 struct cli_context;
 
-typedef int cli_work_exec_fn(const struct cli_work *, struct cli_context *);
+typedef int cli_work_exec_fn(struct cli_work *, struct cli_context *);
 
 typedef void cli_work_release_fn(struct cli_work *, struct cli_context *);
 

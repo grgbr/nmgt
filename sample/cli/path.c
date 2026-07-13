@@ -1,28 +1,53 @@
 #include "path.h"
+#include <stdbool.h>
 #include <ctype.h>
 #include <string.h>
 
-#define CLI_PATH_INIT_STACK_NR (CLI_PATH_MAX / CLI_PATH_NAME_MAX)
-#if CLI_PATH_INIT_STACK_NR < 4
-#undef CLI_PATH_INIT_STACK_NR
-#define CLI_PATH_INIT_STACK_NR (4)
-#endif /* CLI_PATH_INIT_STACK_NR < 4 */
+#define CLI_PATH_INIT_NR (CLI_PATH_MAX / CLI_PATH_NAME_MAX)
+#if CLI_PATH_INIT_NR < 4
+#undef CLI_PATH_INIT_NR
+#define CLI_PATH_INIT_NR (4)
+#endif /* CLI_PATH_INIT_NR < 4 */
 
-#define cli_path_assert_comp(_comp) \
-	cli_assert(_comp); \
-	cli_assert((_comp)->str); \
-	cli_assert((_comp)->len); \
-	cli_assert(cli_path_iscomp_valid((_comp)->str) == \
-	           (ssize_t)((_comp)->len))
+const char *
+cli_path_strerror(int error)
+{
+	switch (error) {
+	case EINVAL:
+		return "unexpected path component character";
+	case ENAMETOOLONG:
+		return "path or component too long";
+	case ENODATA:
+		return "path component empty";
+	case ENOBUFS:
+		return "not enought buffer space";
+	default:
+		cli_assert(0);
+	}
+}
 
-#define cli_path_assert_stack(_stk) \
-	cli_assert(_stk); \
-	cli_assert((_stk)->nr); \
-	cli_assert((_stk)->cnt <= (_stk)->nr); \
-	cli_assert((_stk)->comps)
+static inline bool
+cli_path_iscomp_lead_char(const char * character)
+{
+	if (isalpha(*character) || (*character == '_'))
+		return true;
+	else
+		return false;
+}
 
-static int
-_cli_path_iscomp_valid(const char * component, size_t length)
+static inline bool
+cli_path_iscomp_char(const char * character)
+{
+	cli_assert(character);
+
+	if (isalnum(*character) || (*character == '_') || (*character == '-'))
+		return true;
+	else
+		return false;
+}
+
+int
+cli_path_comp_isok(const char * component, size_t length)
 {
 	cli_assert(component);
 
@@ -31,11 +56,11 @@ _cli_path_iscomp_valid(const char * component, size_t length)
 	if (length >= CLI_PATH_NAME_MAX)
 		return -ENAMETOOLONG;
 
-	if (isalpha(*component) || (*component == '_')) {
+	if (cli_path_iscomp_lead_char(component)) {
 		const char * ptr = component;
 
 		while (++ptr < &component[length]) {
-			if (!isalnum(*ptr) && (*ptr != '_') && (*ptr != '-'))
+			if (!cli_path_iscomp_char(ptr))
 				return -EINVAL;
 		}
 
@@ -50,280 +75,495 @@ _cli_path_iscomp_valid(const char * component, size_t length)
 	return -EINVAL;
 }
 
-static ssize_t
-cli_path_iscomp_valid(const char * component)
+int
+cli_path_comp_ncmp(const struct cli_path_comp * component,
+                   const char *                 string,
+                   size_t                       length)
 {
-	cli_assert(component);
+	cli_path_assert_comp(component);
+	cli_assert(string);
+	cli_assert(length < CLI_PATH_NAME_MAX);
 
+	size_t len = component->len;
+
+	if (len != length)
+		return len - length;
+
+	return strncmp(component->str, string, len);
+}
+
+int
+cli_path_comp_cmp(const struct cli_path_comp * component,
+                  const char *                 string)
+{
 	size_t len;
-	int    err;
 
-	len = strnlen(component, CLI_PATH_NAME_MAX);
-	err = _cli_path_iscomp_valid(component, len);
-	if (err)
-		return (ssize_t)err;
+	len = strnlen(string, CLI_PATH_NAME_MAX);
+	if (!len)
+		return -ENODATA;
+	if (len == CLI_PATH_NAME_MAX)
+		return -ENAMETOOLONG;
 
-	return (ssize_t)len;
+	return cli_path_comp_ncmp(component, string, len);
+}
+
+/* Return the kind of a valid (i.e., already parsed) path component. */
+enum cli_path_comp_kind
+cli_path_comp_kind(const struct cli_path_comp * component)
+{
+	cli_path_assert_comp(component);
+
+	switch (component->len) {
+	case 2:
+		if ((component->str[0] == '.') && (component->str[1] == '.'))
+			return CLI_PATH_UPPER_COMP_KIND;
+		break;
+
+	case 1:
+		if (component->str[0] == '.')
+			return CLI_PATH_CURR_COMP_KIND;
+		break;
+
+	default:
+		break;
+	}
+
+	return CLI_PATH_REG_COMP_KIND;
 }
 
 static size_t
-cli_path_stack_length(const struct cli_path_stack * stack)
+cli_path_length(const struct cli_path * path)
 {
-	cli_path_assert_stack(stack);
+	cli_path_assert(path);
 
-	unsigned int c;
-	size_t       len;
+	unsigned int                 c;
+	unsigned int                 cnt;
+	const struct cli_path_comp * comp;
+	size_t                       len = 0;
 
-	for (c = 0, len = 0; c < stack->cnt; c++) {
-		cli_path_assert_comp(&stack->comps[c]);
+	cli_path_foreach_comp(path, c, cnt, comp) {
+		cli_path_assert_comp(comp);
 
-		len += stack->comps[c].len;
+		len += comp->len;
 	}
 
 	/*
 	 * Return sum of all component lengths + space required for the number
 	 * of path delimiter characters.
 	 */
-	return len ? (len + stack->cnt - 1) : 0;
+	return len ? (len + path->cnt - 1) : 0;
 }
 
-void
-cli_path_push_comp(struct cli_path_stack * stack,
-                   const char *            component,
-                   size_t                  length)
-{
-	cli_path_assert_stack(stack);
-	cli_assert(component);
-	cli_assert(length);
-	cli_assert(cli_path_iscomp_valid(component) == (ssize_t)length);
-
-	struct cli_path_comp * comp;
-
-	if (stack->cnt == stack->nr) {
-		stack->nr *= 2;
-		stack->comps = cli_realloc(stack->comps,
-		                           stack->nr * sizeof(stack->comps[0]));
-	}
-
-	comp = &stack->comps[stack->cnt++];
-	comp->str = component;
-	comp->len = length;
-}
-
-static const struct cli_path_comp *
-cli_path_pop_comp(struct cli_path_stack * stack)
-{
-	cli_path_assert_stack(stack);
-
-	if (!stack->cnt)
-		return NULL;
-
-	stack->cnt--;
-	cli_path_assert_comp(&stack->comps[stack->cnt]);
-
-	return &stack->comps[stack->cnt];
-}
-
+/* Append the content of component to string given in argument. */
 static char *
-cli_path_join_comp(const struct cli_path_comp * comp, char * path)
+cli_path_comp_strcat(const struct cli_path_comp * comp, char * string)
 {
 	cli_path_assert_comp(comp);
-	cli_assert(path);
+	cli_assert(string);
 
-	memcpy(path, comp->str, comp->len);
+	memcpy(string, comp->str, comp->len);
 	
-	return path + comp->len;
+	return string + comp->len;
 }
 
-static char *
-cli_path_join_from_stack(struct cli_path_stack * stack,
-                         char *                  path)
+/* Append the content of the entire path to string given in argument. */
+static void
+cli_path_strcat(const struct cli_path * path, char * string)
 {
-	cli_path_assert_stack(stack);
-	cli_assert(path);
+	cli_path_assert(path);
+	cli_assert(string);
 
-	unsigned int c = stack->cnt;
-	char *       ptr = path;
+	char * str = string;
 
-	while (c--) {
-		*(ptr++) = '/';
-		ptr = cli_path_join_comp(&stack->comps[c], ptr);
+	if (path->cnt) {
+		unsigned int                 c = path->head;
+		unsigned int                 cnt = path->cnt;
+		const struct cli_path_comp * comp;
+
+		str = cli_path_comp_strcat(&path->comps[c], str);
+		cli_path_foreach_comp_continue(path, c, cnt, comp) {
+			*(str++) = '/';
+			str = cli_path_comp_strcat(comp, str);
+		}
 	}
 
-	*ptr = '\0';
-
-	stack->cnt = 0;
-
-	return ptr;
+	*str = '\0';
 }
 
 ssize_t
-cli_path_mkrel_from_stack(struct cli_path_stack * stack,
-                          char *                  path,
-                          size_t                  size)
+cli_path_mkrel(struct cli_path * path, char * string, size_t size)
 {
-	cli_path_assert_stack(stack);
-	cli_assert(path);
+	cli_path_assert(path);
+	cli_assert(string);
 	cli_assert(size);
 	cli_assert(size <= CLI_PATH_MAX);
 
 	size_t len;
 
-	len = cli_path_stack_length(stack);
+	len = cli_path_length(path);
 	if (len >=  size)
 		return -ENOBUFS;
 
-	if (stack->cnt) {
-		path = cli_path_join_comp(cli_path_pop_comp(stack), path);
-		path = cli_path_join_from_stack(stack, path);
-	}
-
-	*path = '\0';
+	cli_path_strcat(path, string);
 
 	return len;
 }
 
 ssize_t
-cli_path_mkabs_from_stack(struct cli_path_stack * stack,
-                          char *                  path,
-                          size_t                  size)
+cli_path_mkabs(struct cli_path * path, char * string, size_t size)
 {
-	cli_path_assert_stack(stack);
-	cli_assert(path);
+	cli_path_assert(path);
+	cli_assert(string);
 	cli_assert(size);
 	cli_assert(size <= CLI_PATH_MAX);
 
 	size_t len;
 
-	len = 1 + cli_path_stack_length(stack);
+	len = 1 + cli_path_length(path);
 	if (len >= size)
 		return -ENOBUFS;
 
-	path = cli_path_join_from_stack(stack, path);
-
-	*path = '\0';
+	string[0] = '/';
+	cli_path_strcat(path, &string[1]);
 
 	return len;
 }
 
-/******************************************************************************/
-/******************************************************************************/
-/******************************************************************************/
-/******************************************************************************/
+static const struct cli_path_comp *
+cli_path_peek_tail(const struct cli_path * path)
+{
+	cli_path_assert(path);
+
+	if (path->cnt) {
+		struct cli_path_comp * comp;
+
+		comp = &path->comps[(path->head + path->cnt - 1) % path->nr];
+		cli_path_assert_comp(comp);
+
+		return comp;
+	}
+	else
+		return NULL;
+}
+
+static inline void
+cli_path_grow(struct cli_path * path)
+{
+	cli_path_assert(path);
+
+	if (path->cnt == path->nr) {
+		struct cli_path_comp * comps;
+		unsigned int           hcnt;  /* Count of head components. */
+		unsigned int           tcnt;  /* Count of tail components. */
+
+		hcnt = (path->nr - path->head);
+		if (hcnt > path->cnt)
+			hcnt = path->cnt;
+		tcnt = path->cnt - hcnt;
+
+		path->nr *= 2;
+		comps = cli_malloc(path->nr * sizeof(path->comps[0]));
+
+		/*
+		 * Copy leading components first starting from the begining of
+		 * the new memory area. Then, append the trailing components
+		 * right after the leading components.
+		 */
+		memcpy(comps,
+		       &path->comps[path->head],
+		       hcnt * sizeof(comps[0]));
+		if (tcnt)
+			memcpy(&comps[hcnt],
+			       &path->comps[0],
+			       tcnt * sizeof(comps[0]));
+
+		path->head = 0;
+
+		cli_free(path->comps);
+		path->comps = comps;
+	}
+}
+
+void
+cli_path_push_head(struct cli_path * path,
+                   const char *      component,
+                   size_t            length)
+{
+	cli_path_assert(path);
+	cli_assert(component);
+	cli_assert(length);
+	cli_assert(!cli_path_comp_isok(component, length));
+
+	struct cli_path_comp * comp;
+	unsigned int           head;
+
+	cli_path_grow(path);
+
+	head = (path->head + path->nr - 1) % path->nr;
+
+	comp = &path->comps[head];
+	comp->str = component;
+	comp->len = length;
+
+	path->head = head;
+	path->cnt++;
+}
+
+void
+cli_path_push_tail(struct cli_path * path,
+                   const char *      component,
+                   size_t            length)
+{
+	cli_path_assert(path);
+	cli_assert(component);
+	cli_assert(length);
+	cli_assert(!cli_path_comp_isok(component, length));
+
+	struct cli_path_comp * comp;
+	unsigned int           tail;
+
+	cli_path_grow(path);
+
+	tail = (path->head + path->cnt) % path->nr;
+
+	comp = &path->comps[tail];
+	comp->str = component;
+	comp->len = length;
+
+	path->cnt++;
+}
 
 static size_t
-cli_path_skip_delim(const char * path, size_t size)
+cli_path_skip_delim(const char * string, size_t size)
 {
-	cli_assert(path);
+	cli_assert(string);
 	cli_assert(size);
 	cli_assert(size < CLI_PATH_MAX);
 
-	const char * ptr = path;
+	const char * str = string;
 
 	do {
-		if (*ptr != '/')
+		if (*str != '/')
 			break;
-	} while (++ptr < &path[size]);
+	} while (++str < &string[size]);
 
-	return (size_t)(ptr - path);
+	return (size_t)(str - string);
 }
-
-enum cli_path_comp {
-	CLI_PATH_REG_COMP,   /* Regular path component. */
-	CLI_PATH_UPPER_COMP, /* Upper directory, i.e., `..' */
-	CLI_PATH_CURR_COMP,  /* Current directory, i.e., `.' */
-	CLI_PATH_COMP_NR     /* Invalid component type. */
-};
 
 static ssize_t
-cli_path_parse_comp(enum cli_path_comp * kind, const char * ptr, size_t size)
+cli_path_parse_comp(enum cli_path_comp_kind * kind,
+                    const char *              string,
+                    size_t                    size)
 {
-implement me!!
+	cli_assert(kind);
+	cli_assert(string);
+	cli_assert(size);
+
+	const char * str = string;
+	const char * end = &string[size];
+
+	if (cli_path_iscomp_lead_char(str)) {
+		while (++str < end) {
+			if (!cli_path_iscomp_char(str))
+				break;
+		}
+
+		if ((str == end) || (*str == '/') || (*str == '\0')) {
+			*kind = CLI_PATH_REG_COMP_KIND;
+			return (ssize_t)(str - string);
+		}
+	}
+	else if (*str == '.') {
+		if ((size == 1) || (str[1] == '/') || (str[1] == '\0')) {
+			*kind = CLI_PATH_CURR_COMP_KIND;
+			return 1;
+		}
+		else if ((str[1] == '.') &&
+		    ((size == 2) || (str[2] == '/') || (str[2] == '\0'))) {
+			*kind = CLI_PATH_UPPER_COMP_KIND;
+			return 2;
+		}
+	}
+	else if (*str == '\0')
+		return 0;
+
+	return -EINVAL;
 }
 
-int
-cli_path_parse_stack(struct cli_path_stack * stack,
-                     const char *            path,
-                     size_t                  size)
+static void
+cli_push_upper_comp_tail(struct cli_path * path,
+                         const char *      string,
+                         size_t            length,
+                         bool              abspath)
 {
-	cli_assert(path);
+	const struct cli_path_comp * last;
+
+	last = cli_path_peek_tail(path);
+
+	if (!abspath) {
+		/*
+		 * We are parsing a relative path.
+		 * If a previously (upper) parsed regular component exists, pop
+		 * it out.
+		 * Else, push the "upper directory" component along the existing
+		 * path.
+		 */
+		if (last &&
+		    (cli_path_comp_kind(last) == CLI_PATH_REG_COMP_KIND))
+			path->cnt--;
+		else
+			cli_path_push_tail(path, string, length);
+	}
+	else {
+		/*
+		 * We are parsing an absolute path.
+		 * If a previously (upper) parsed regular component exists, pop
+		 * it out.
+		 * In any other cases, no need to push an "upper directory"
+		 * component since we are already at the root level.
+		 */
+		if (last) {
+		    cli_assert(cli_path_comp_kind(last) ==
+		               CLI_PATH_REG_COMP_KIND);
+			path->cnt--;
+		}
+	}
+}
+
+static int
+_cli_path_parse(struct cli_path * path,
+                const char *      string,
+                size_t            size,
+                bool              abspath)
+{
+	cli_path_assert(path);
+	cli_assert(string);
 	cli_assert(size);
 	cli_assert(size < CLI_PATH_MAX);
-	cli_assert(strnlen(path, CLI_PATH_MAX) == (size - 1));
+	cli_assert(strnlen(string, CLI_PATH_MAX) == (size - 1));
 
-	const char * ptr = path;
+	const char * str = string;
 
 	do {
-		ssize_t            len;
-		enum cli_path_comp kind;
+		ssize_t                 len;
+		enum cli_path_comp_kind kind;
 
-		len = (size_t)cli_path_skip_delim(ptr, size);
-		ptr += len;
+		len = (size_t)cli_path_skip_delim(str, size);
+		str += len;
 		size -= len;
 		if (!size)
 			break;
 
-		len = cli_path_parse_comp(&kind, ptr, size);
+		len = cli_path_parse_comp(&kind, str, size);
 		if (len <= 0)
 			return len;
 
 		switch (kind) {
-		case CLI_PATH_REG_COMP:
-			cli_path_push_comp(stack, ptr, len);
+		case CLI_PATH_REG_COMP_KIND:
+			cli_path_push_tail(path, str, len);
 			break;
 
-		case CLI_PATH_UPPER_COMP:
-			cli_path_pop_comp(stack);
-			break;
+		case CLI_PATH_UPPER_COMP_KIND:
+			cli_push_upper_comp_tail(path, str, len, abspath);
 
-		case CLI_PATH_CURR_COMP:
+		case CLI_PATH_CURR_COMP_KIND:
 			break;
 
 		default:
 			cli_assert(0);
 		}
 
-		ptr += len;
+		str += len;
 		size -= len;
 	} while (size);
 
 	return 0;
 }
 
-/******************************************************************************/
-/******************************************************************************/
-/******************************************************************************/
-/******************************************************************************/
-
-
-void
-cli_path_init_stack(struct cli_path_stack * stack)
+int
+cli_path_parse(struct cli_path * path, const char * string)
 {
-	cli_assert(stack);
+	cli_path_assert(path);
+	cli_assert(string);
 
-	stack->nr = CLI_PATH_INIT_STACK_NR;
-	stack->cnt = 0;
-	stack->comps = cli_malloc(CLI_PATH_INIT_STACK_NR *
-	                          sizeof(stack->comps[0]));
+	size_t len;
+
+	len = strnlen(string, CLI_PATH_MAX);
+	if (len == CLI_PATH_MAX)
+		return -ENAMETOOLONG;
+
+	return _cli_path_parse(path, string, len + 1, *string == '/');
 }
 
 void
-cli_path_fini_stack(struct cli_path_stack * stack)
+cli_path_init(struct cli_path * path)
 {
-	cli_path_assert_stack(stack);
+	cli_assert(path);
 
-	cli_free(stack->comps);
+	path->nr = CLI_PATH_INIT_NR;
+	path->head = 0;
+	path->cnt = 0;
+	path->comps = cli_malloc(CLI_PATH_INIT_NR * sizeof(path->comps[0]));
 }
 
-#warning Implement internal component validation !
+void
+cli_path_fini(struct cli_path * path)
+{
+	cli_path_assert(path);
+
+	cli_free(path->comps);
+}
+
 ssize_t
+cli_path_normalize(const char * path, char * norm, size_t size)
+{
+	cli_assert(path);
+	cli_assert(norm);
+	cli_assert(size);
+	cli_assert(size <= CLI_PATH_MAX);
+
+	if (*path != '\0') {
+		struct cli_path pth;
+		ssize_t         len;
+
+		cli_path_init(&pth);
+
+		len = cli_path_parse(&pth, path);
+		if (len)
+			goto out;
+
+		if (*path != '/')
+			len = cli_path_mkrel(&pth, norm, size);
+		else
+			len = cli_path_mkabs(&pth, norm, size);
+
+out:
+		cli_path_fini(&pth);
+
+		return (int)len;
+	}
+	else {
+		norm[0] = '\0';
+
+		return 0;
+	}
+}
+
+int
 cli_path_isok(const char * path)
 {
 	cli_assert(path);
 
-	size_t len;
+	if (*path != '\0') {
+		struct cli_path pth;
+		int             ret;
 
-	len = strnlen(path, CLI_PATH_MAX);
+		cli_path_init(&pth);
+		ret = cli_path_parse(&pth, path);
+		cli_path_fini(&pth);
 
-	return (len < (size_t)CLI_PATH_MAX) ? (ssize_t)len : -ENAMETOOLONG;
+		return ret;
+	}
+	else
+		return 0;
 }

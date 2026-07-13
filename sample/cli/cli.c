@@ -68,15 +68,7 @@ cli_parse(struct cli_context * context, int argc, const char * const argv[])
 	cli_assert_context(context);
 	cli_assert_args(argc, argv);
 
-	int ret;
-
-	ret = cli_dir_parse_cmd(context->cwd, argc, argv, context);
-	if (ret < 0) {
-		cli_log("'%s': invalid command.", argv[0]);
-		return ret;
-	}
-
-	return 0;
+	return cli_dir_parse_cmd(context->cwd, argc, argv, context);
 }
 
 #if defined(CONFIG_CLI_LOG)
@@ -171,7 +163,9 @@ cli_init_context(struct cli_context * context)
 		return err;
 	}
 
-	err = sr_session_start(context->conn, SR_DS_OPERATIONAL, &context->sess);
+	err = sr_session_start(context->conn,
+	                       SR_DS_OPERATIONAL,
+	                       &context->sess);
 	if (err != SR_ERR_OK) {
 		cli_log("cannot start repo session: %s",
 		        sr_strerror(err));
@@ -190,7 +184,7 @@ cli_init_context(struct cli_context * context)
 	}
 
 	context->wkcnt = 0;
-	cli_dir_init(&context->root, "/");
+	_cli_dir_init(&context->root, "/", sizeof("/") - 1);
 	context->cwd = &context->root;
 	context->isatty = !!isatty(STDOUT_FILENO);
 

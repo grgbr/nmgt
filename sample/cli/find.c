@@ -2,8 +2,6 @@
 #include "cli.h"
 #include "cmd.h"
 
-#warning Refactor with list and xpath commands
-
 /******************************************************************************
  * `find' command handling.
  * List menu directory entries recursively.
@@ -11,11 +9,13 @@
 
 struct cli_find_work {
 	/* Base work unit structure. */
-	struct cli_work super;
-	/* Optional (may be NULL) pointer to argv[1] path argument. */
-	const char *    path;
-	/* Length of path (if any) excluding terminating NULL byte. */
-	size_t          len;
+	struct cli_work       super;
+	/* Internal state of requested path search. */
+	struct cli_dir_search search;
+	/* Length of `norm' field, excluding the terminating NULL byte. */
+	size_t                len;
+	/* Validated normalized requested path. */
+	char                  norm[CLI_PATH_MAX];
 };
 
 struct cli_find_show {
@@ -24,44 +24,34 @@ struct cli_find_show {
 	size_t                 off;
 };
 
-static void
-cli_find_show_dir_path(const struct cli_dir *       directory,
-                       const struct cli_find_show * show)
-{
-	ssize_t ret;
-
-	if (show->anc) {
-		cli_assert((show->off + 1) < CLI_PATH_MAX);
-
-		ret = cli_dir_relpath(directory,
-		                      show->anc,
-		                      &show->path[show->off],
-		                      CLI_PATH_MAX - show->off);
-	}
-	else
-		ret = cli_dir_abspath(directory,
-		                      show->path,
-		                      CLI_PATH_MAX);
-
-	cli_assert(ret);
-	if (ret > 0) {
-		printf("%s\n", show->path);
-		return;
-	}
-
-	cli_log("find: failed to show some path: %s\n", strerror(-ret));
-}
-
 static int
-cli_find_show_dir(struct cli_dir *    dir,
+cli_find_show_dir(struct cli_dir *    directory,
                   enum cli_walk_event event,
                   void *              data)
 {
-	cli_dir_assert(dir);
+	cli_dir_assert(directory);
+	cli_assert(data);
 
 	switch (event) {
 	case CLI_WALK_PRE_EVT:
-		cli_find_show_dir_path(dir, data);
+		{
+			const struct cli_find_show * show = data;
+			ssize_t                      ret;
+
+			ret = cli_dir_mkrel(directory,
+			                    show->anc,
+			                    &show->path[show->off],
+			                    CLI_PATH_MAX - show->off);
+
+			cli_assert(ret);
+			if (ret > 0)
+				printf("%s\n", show->path);
+			else
+				cli_log("find: cannot show some path: %s.",
+				        cli_dir_strerror(-ret));
+
+			break;
+		}
 
 	case CLI_WALK_POST_EVT:
 		break;
@@ -74,74 +64,81 @@ cli_find_show_dir(struct cli_dir *    dir,
 }
 
 static int
-cli_find_exec_work(const struct cli_work * work,
-                   struct cli_context *    context)
+cli_find_exec_work(struct cli_work * work, struct cli_context * context)
 {
-	const struct cli_find_work * wk = (const struct cli_find_work *)work;
-	char *                       path = cli_malloc(CLI_PATH_MAX);
-	struct cli_find_show         show = { .path = path };
-	const struct cli_dir *       dir = cli_cwd(context);
-	int                          ret;
+	struct cli_find_work * wk = (struct cli_find_work *)work;
+	const struct cli_dir * dir;
+	int                    ret;
+	struct cli_find_show   show;
 
-	cli_assert(!wk->path || wk->len);
-
-	if (wk->path) {
-		cli_assert(wk->path[0] != '\0');
-		cli_assert(wk->len);
-		cli_assert((wk->len) < CLI_PATH_MAX);
-		cli_assert(wk->path[wk->len] == '\0');
-
-		/* Search for a menu directory matching the given path. */
-		ret = cli_dir_search(&dir, wk->path, wk->len);
-		if (ret) {
-			cli_log("find: '%s': invalid path: %s.",
-			        wk->path,
-			        strerror(-ret));
-			goto free;
-		}
-
-		if (!cli_dir_has_child(dir))
-			goto free;
-
-		if (wk->path[0] != '/') {
-			if ((wk->len + 1) >= CLI_PATH_MAX) {
-				cli_log("find: failed to show some path: %s\n",
-				        strerror(ENAMETOOLONG));
-				goto free;
-			}
-
-			memcpy(path, wk->path, wk->len + 1);
-			path[wk->len] = '/';
-			show.anc = dir;
-			show.off = wk->len + 1;
-		}
-		else
-			show.anc = NULL;
-	}
-	else {
-		/*
-		 * Show directory entries relative to current working directory.
-		 */
-		show.anc = dir;
-		show.off = 0;
+	ret = cli_dir_exec_search(&wk->search, &dir, context);
+	if (ret) {
+		cli_log("find: '%s': %s.",
+		        wk->search.orig,
+		        cli_dir_strerror(-ret));
+		return ret;
 	}
 
 	/*
-	 * Given the directory descriptor found above, display its children
+	 * Given the directory descriptor found above, display its descendant
 	 * directory entries.
 	 */
-	ret = cli_dir_walk((struct cli_dir *)dir, cli_find_show_dir, &show);
+	show.anc = dir;
+	show.path = wk->norm;
+	show.off = wk->len;
 
-free:
-	cli_free(path);
+	return cli_dir_walk((struct cli_dir *)dir, cli_find_show_dir, &show);
+}
 
-	return ret;
+static inline void
+cli_find_release_work(struct cli_work *    work,
+                      struct cli_context * context __cli_unused)
+{
+	cli_dir_fini_search(&((struct cli_find_work *)work)->search);
 }
 
 static const struct cli_work_ops cli_find_work_ops = {
 	.exec    = cli_find_exec_work,
-	.release = cli_null_release_work
+	.release = cli_find_release_work
 };
+
+static int
+cli_find_parse_search(struct cli_find_work * work, const char * path)
+{
+	cli_assert(work);
+
+	ssize_t ret = 0;
+
+	if (path && (*path != '\0')) {
+		ret = cli_path_parse(&work->search.path, path);
+		if (ret)
+			return (int)ret;
+
+		work->search.orig = path;
+
+		if (*path != '/')
+			ret = cli_path_mkrel(&work->search.path,
+			                     work->norm,
+			                     sizeof(work->norm));
+		else
+			ret = cli_path_mkabs(&work->search.path,
+			                     work->norm,
+			                     sizeof(work->norm));
+
+		cli_assert(ret >= 0);
+		if (ret && (work->norm[ret - 1] != '/')) {
+			if ((size_t)(ret + 1) >= sizeof(work->norm))
+				return -ENAMETOOLONG;
+
+			work->norm[ret++] = '/';
+		}
+	}
+
+	work->len = (size_t)ret;
+	work->norm[ret] = '\0';
+
+	return 0;
+}
 
 static int
 cli_find_parse_cmd(const struct cli_cmd * command __cli_unused,
@@ -153,35 +150,41 @@ cli_find_parse_cmd(const struct cli_cmd * command __cli_unused,
 	cli_assert(argc >= 1);
 
 	if (!strcmp(argv[0], "find")) {
-		ssize_t                ret;
-		struct cli_find_work * wk;
-		struct cli_context *   ctx = data;
+		if (argc <= 2) {
+			struct cli_find_work * wk;
+			int                    ret;
 
-		if (argc == 2) {
-			ret = cli_path_isok(argv[1]);
-			if (ret < 0) {
-				cli_log("find: invalid specified: %s.",
-				        strerror(-ret));
-				return ret;
+			wk = (struct cli_find_work *)
+			     cli_create_work(sizeof(*wk), &cli_find_work_ops);
+			cli_assert(wk);
+			cli_dir_init_search(&wk->search);
+
+			ret = cli_find_parse_search(wk, (argc == 1) ? NULL
+			                                            : argv[1]);
+			if (ret) {
+				cli_log("find: invalid path: %s.",
+				        cli_path_strerror(-ret));
+				goto destroy;
 			}
-		}
-		else if (argc != 1) {
-			cli_log("find: too many argument(s).");
-			return -EINVAL;
-		}
 
-		wk = (struct cli_find_work *)
-		     cli_create_work(sizeof(*wk), &cli_find_work_ops);
-		wk->path = ret ? argv[1] : NULL;
-		wk->len = (size_t)ret;
-		ret = cli_sched_work(ctx, &wk->super);
-		if (ret) {
-			cli_destroy_work(&wk->super, ctx);
-			cli_log("find: cannot schedule work.");
+			ret = cli_sched_work(data, &wk->super);
+			if (ret) {
+				cli_log("find: cannot schedule work.");
+				goto destroy;
+			}
+
+			return argc;
+
+destroy:
+			cli_destroy_work(&wk->super, data);
+
 			return ret;
 		}
+		else {
+			cli_log("find: too many argument(s).");
 
-		return argc;
+			return -EINVAL;
+		}
 	}
 	else
 		return 0;

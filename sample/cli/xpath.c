@@ -8,45 +8,39 @@
  ******************************************************************************/
 
 struct cli_xpath_work {
-	/* Base work unit structure. */
-	struct cli_work super;
-	/* Optional (may be NULL) pointer to argv[1] path argument. */
-	const char *    path;
-	/* Length of path (if any) excluding terminating NULL byte. */
-	size_t          len;
+	struct cli_work       super;
+	struct cli_dir_search search;
 };
 
 static int
-cli_xpath_exec_work(const struct cli_work * work,
-                    struct cli_context *    context)
+cli_xpath_exec_work(struct cli_work * work, struct cli_context * context)
 {
 	const struct cli_xpath_work * wk = (const struct cli_xpath_work *)work;
-	const struct cli_dir *        cwd;
+	const struct cli_dir *        dir;
+	int                           ret;
 	char *                        xpath;
 
-	cli_assert(!wk->path || wk->len);
+	/* Search for the requested directory. */
+	ret = cli_dir_exec_search(&wk->search, &dir, context);
+	if (ret) {
+		/*
+		 *  Searching for the current directory cannot fail. Hence,
+		 * `wk->search.orig' should always exist here.
+		 */
+		cli_assert(wk->search.orig);
 
-	/* Get a pointer to the current working menu directory. */
-	cwd = cli_cwd(context);
+		cli_log("xpath: '%s': %s.",
+		        wk->search.orig,
+		        cli_dir_strerror(-ret));
 
-	if (wk->path) {
-		int ret;
-
-		/* Search for a menu directory matching the given path. */
-		ret = cli_dir_search(&cwd, wk->path, wk->len);
-		if (ret) {
-			cli_log("xpath: '%s': invalid path: %s.",
-			        wk->path,
-			        strerror(-ret));
-			return ret;
-		}
+		return ret;
 	}
 
 	/*
 	 * Given the directory descriptor found above, compute the corresponding
 	 * XPATH and display it.
 	 */
-	xpath = cli_dir_xpath(cwd);
+	xpath = cli_dir_xpath(dir);
 	cli_assert(xpath);
 	printf("%s\n", xpath);
 	cli_free(xpath);
@@ -54,9 +48,16 @@ cli_xpath_exec_work(const struct cli_work * work,
 	return 0;
 }
 
+static inline void
+cli_xpath_release_work(struct cli_work *    work,
+                       struct cli_context * context __cli_unused)
+{
+	cli_dir_fini_search(&((struct cli_xpath_work *)work)->search);
+}
+
 static const struct cli_work_ops cli_xpath_work_ops = {
 	.exec    = cli_xpath_exec_work,
-	.release = cli_null_release_work
+	.release = cli_xpath_release_work
 };
 
 static int
@@ -69,35 +70,42 @@ cli_xpath_parse_cmd(const struct cli_cmd * command __cli_unused,
 	cli_assert(argc >= 1);
 
 	if (!strcmp(argv[0], "xpath")) {
-		ssize_t                 ret;
-		struct cli_xpath_work * wk;
-		struct cli_context *    ctx = data;
+		if (argc <= 2) {
+			ssize_t                ret;
+			struct cli_xpath_work * wk;
 
-		if (argc == 2) {
-			ret = cli_path_isok(argv[1]);
-			if (ret < 0) {
+			wk = (struct cli_xpath_work *)
+			     cli_create_work(sizeof(*wk), &cli_xpath_work_ops);
+			cli_assert(wk);
+			cli_dir_init_search(&wk->search);
+
+			ret = cli_dir_parse_search(&wk->search,
+			                           (argc == 1) ? NULL
+			                                       : argv[1]);
+			if (ret) {
 				cli_log("xpath: invalid path: %s.",
-				        strerror(-ret));
-				return ret;
+				        cli_dir_strerror(-ret));
+				goto destroy;
 			}
-		}
-		else if (argc != 1) {
-			cli_log("xpath: too many argument(s).");
-			return -EINVAL;
-		}
 
-		wk = (struct cli_xpath_work *)
-		     cli_create_work(sizeof(*wk), &cli_xpath_work_ops);
-		wk->path = ret ? argv[1] : NULL;
-		wk->len = (size_t)ret;
-		ret = cli_sched_work(ctx, &wk->super);
-		if (ret) {
-			cli_destroy_work(&wk->super, ctx);
-			cli_log("xpath: cannot schedule work.");
+			ret = cli_sched_work(data, &wk->super);
+			if (ret) {
+				cli_log("xpath: cannot schedule work.");
+				goto destroy;
+			}
+
+			return argc;
+
+destroy:
+			cli_destroy_work(&wk->super, data);
+
 			return ret;
 		}
+		else {
+			cli_log("xpath: too many argument(s).");
 
-		return argc;
+			return -EINVAL;
+		}
 	}
 	else
 		return 0;
