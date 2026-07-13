@@ -1,6 +1,6 @@
 include ../utils.mk
 
-subdirs := oven cli #restconf netconf
+subdirs := oven cli ntp iana ethernet #restconf netconf
 
 .PHONY: all
 all: build

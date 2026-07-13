@@ -29,7 +29,7 @@ $(BUILDDIR)/nmgmt-schema: old/schema.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
 $(BUILDDIR)/nmgmt-data: old/data.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
-$(BUILDDIR)/nmgmt-cli: cli.c list.c find.c xpath.c yang.c dir.c cmd.c path.c common.c | $(BUILDDIR)/
+$(BUILDDIR)/nmgmt-cli: cli.c list.c find.c xpath.c schema.c yang.c dir.c cmd.c path.c common.c | $(BUILDDIR)/
 	$(CC) -dM -o $(@) $(CFLAGS) $(^) $(LDFLAGS)
 
 $(BUILDDIR)/:

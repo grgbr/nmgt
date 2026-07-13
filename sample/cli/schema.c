@@ -1,278 +1,210 @@
 #include "schema.h"
 #include "yang.h"
+#include "cmd.h"
 
 /******************************************************************************
  * `schema' command handling.
  * Print schema for current working command line node.
  ******************************************************************************/
 
-static int
-cli_show_module_yang(struct cli_context * context,
-                     const char *         module)
-{
-	const struct lys_module * mod;
-	int                       ret;
+struct cli_schema_work {
+	struct cli_work       super;
+	struct cli_dir_search search;
+	LYS_OUTFORMAT         format;
+};
 
-	mod = cli_lys_find_module(context, module);
-	if (!mod) {
-		cli_log("'%s': module not found.", module);
-		return SR_ERR_NOT_FOUND;
-	}
-
-	ret = cli_lys_print_module_yang(context, mod, 0);
-	if (ret != LY_SUCCESS) {
-		cli_log("'%s': cannot show module YANG: %s.",
-		        module,
-		        ly_strerr(ret));
-		return SR_ERR_LY;
-	}
-
-	return SR_ERR_OK;
-}
+struct cli_schema_show {
+	const struct cli_schema_work * work;
+	const struct cli_context *     context;
+};
 
 static int
-cli_show_module_diag(struct cli_context * context, const char * module)
+cli_schema_show_dir(const struct cli_dir *         directory,
+                    const struct cli_schema_show * show)
 {
-	const struct lys_module * mod;
-	int                       ret;
+	cli_dir_assert(directory);
+	cli_assert((cli_dir_type(directory) == CLI_DIR_MOD_TYPE) ||
+	           (cli_dir_type(directory) == CLI_DIR_NODE_TYPE));
+	cli_assert(show);
+	cli_assert(show->work);
+	cli_assert_context(show->context);
 
-	mod = cli_lys_find_module(context, module);
-	if (!mod) {
-		cli_log("'%s': invalid module.", module);
-		return SR_ERR_NOT_FOUND;
-	}
-
-	ret = cli_lys_print_module_diag(context, mod);
-	if (ret != LY_SUCCESS) {
-		cli_log("'%s': cannot show module tree diagram: %s.",
-		        module,
-		        ly_strerr(ret));
-		return SR_ERR_LY;
-	}
-
-	return SR_ERR_OK;
-}
-
-static int
-cli_show_node_yang(struct cli_context *     context,
-                   const struct lysc_node * subtree,
-                   const char *             xpath)
-{
-	const struct lysc_node * node;
-	int                      ret;
-
-	node = cli_lysc_find_node(context, subtree, xpath);
-	if (!node) {
-		cli_log("'%s': XPATH node not found.", xpath);
-		return SR_ERR_NOT_FOUND;
-	}
-
-	ret = cli_lysc_print_node_yang(context, node, 0);
-	if (ret != LY_SUCCESS) {
-		cli_log("'%s': cannot show XPATH node YANG: %s.",
-		        xpath,
-		        ly_strerr(ret));
-		return SR_ERR_LY;
-	}
-
-	return SR_ERR_OK;
-}
-
-static int
-cli_show_nodeset_yang(struct cli_context *     context,
-                      const struct lysc_node * subtree,
-                      const char *             xpath)
-{
-	struct ly_set * nodes;
-
-	nodes = cli_lysc_find_nodeset(context, subtree, xpath);
-	if (nodes) {
-		cli_assert(nodes->count);
-
-		int ret;
-
-		ret = cli_lysc_print_nodeset_yang(context, nodes, 0);
-		ly_set_free(nodes, NULL);
-
-		if (ret == LY_SUCCESS)
-			return SR_ERR_OK;
-
-		cli_log("'%s': cannot show XPATH nodes YANG: %s.",
-		        xpath,
-		        ly_strerr(ret));
-		return SR_ERR_LY;
-	}
-	else {
-		cli_log("'%s': XPATH nodes not found.", xpath);
-		return SR_ERR_NOT_FOUND;
-	}
-}
-
-static int
-cli_show_node_diag(struct cli_context *     context,
-                   const struct lysc_node * subtree,
-                   const char *             xpath)
-{
-	const struct lysc_node * node;
-	int                      ret;
-
-	node = cli_lysc_find_node(context, subtree, xpath);
-	if (!node) {
-		cli_log("'%s': XPATH node not found.", xpath);
-		return SR_ERR_NOT_FOUND;
-	}
-
-	ret = cli_lysc_print_node_diag(context, node);
-	if (ret != LY_SUCCESS) {
-		cli_log("'%s': cannot show XPATH node tree diagram: %s.",
-		        xpath,
-		        ly_strerr(ret));
-		return SR_ERR_LY;
-	}
-
-	return SR_ERR_OK;
-}
-
-static int
-cli_show_nodeset_diag(struct cli_context *     context,
-                      const struct lysc_node * subtree,
-                      const char *             xpath)
-{
-	struct ly_set * nodes;
-
-	nodes = cli_lysc_find_nodeset(context, subtree, xpath);
-	if (nodes) {
-		cli_assert(nodes->count);
-
-		int ret;
-
-		ret = cli_lysc_print_nodeset_diag(context, nodes);
-		ly_set_free(nodes, NULL);
-
-		if (ret == LY_SUCCESS)
-			return SR_ERR_OK;
-
-		cli_log("'%s': cannot show XPATH nodes tree diagram: %s.",
-		        xpath,
-		        ly_strerr(ret));
-		return SR_ERR_LY;
-	}
-	else {
-		cli_log("'%s': XPATH nodes not found.", xpath);
-		return SR_ERR_NOT_FOUND;
-	}
-}
-
-static int
-cli_schema_exec_work(const struct cli_work * work,
-                     struct cli_context *    context)
-{
 	int ret;
 
-	//cli_show_node_yang(context, NULL, "/oven:oven-state");
+	switch (show->work->format) {
+#if defined(CONFIG_CLI_DEBUG)
+	case LYS_OUT_TREE:
+		ret = cli_dir_show_diag(directory, show->context);
+		if (ret)
+			cli_log("schema: cannot show YANG tree diagram: %s.",
+			        cli_dir_strerror(-ret));
+		break;
+#endif /* defined(CONFIG_CLI_DEBUG) */
 
-	//cli_show_nodeset_yang(context, NULL, "/oven:*");
-	// first unprefixed top-level container
-	//cli_show_nodeset_yang(context, NULL, "/oven");
-	//cli_show_nodeset_yang(context, NULL, "oven");
+	case LYS_OUT_YANG_COMPILED:
+		ret = cli_dir_show_yang(directory, show->context);
+		if (ret)
+			cli_log("schema: cannot show YANG specification: %s.",
+			        cli_dir_strerror(-ret));
+		break;
 
-	//cli_show_node_diag(context, NULL, "/oven:oven-state");
+	default:
+		cli_assert(0);
+	}
 
-	//cli_show_nodeset_diag(context, NULL, "/oven:*");
-	// first unprefixed top-level container
-	//cli_show_nodeset_diag(context, NULL, "/oven");
-	//cli_show_nodeset_diag(context, NULL, "oven");
+	return ret;
+}
 
-#if 0
-	if (!context->select) {
-		ret = cli_load_config(context, "/oven:oven-state/temperature", 0, &context->select);
-		if (ret != SR_ERR_OK) {
-			cli_log("schema: cannot load data: %s.",
-			        sr_strerror(ret));
-			return ret;
+static int
+cli_schema_show_visit(struct cli_dir *    directory,
+                      enum cli_walk_event event,
+                      void *              data)
+{
+	cli_dir_assert(directory);
+	cli_assert(data);
+
+	switch (event) {
+	case CLI_WALK_PRE_EVT:
+		if (cli_dir_type(directory) != CLI_DIR_NONE_TYPE) {
+			cli_schema_show_dir(directory, data);
+
+			return CLI_WALK_SKIP_RET;
 		}
-#warning TODO: set prompt
+
+		break;
+
+	case CLI_WALK_POST_EVT:
+		break;
+
+	default:
+		cli_assert(0);
 	}
 
-#warning FIXME (implemented / internal / out format)
-#if 1
-	const struct lyd_node * node;
-	LY_LIST_FOR(context->select->tree, node) {
-		ret = lys_print_node(context->lyout,
-		                     node->schema,
-		                     LYS_OUT_TREE,
-		                     0,
-		                     0/* LYS_PRINT_NO_SUBSTMT */);
-	}
-#else
-	const struct lyd_node * node;
-	LY_LIST_FOR(context->select->tree, node) {
-		ret = lys_print_module(context->lyout,
-		                       node->schema->module,
-		                       LYS_OUT_TREE,
-		                       0,
-		                       0/* LYS_PRINT_NO_SUBSTMT */);
-	}
-#endif
-#endif
-	if (ret != LY_SUCCESS) {
-		cli_log("schema: cannot display: %s.", ly_strerr(ret));
-		return SR_ERR_LY;
+	return CLI_WALK_CONT_RET;
+}
+
+static int
+cli_schema_exec_work(struct cli_work * work, struct cli_context * context)
+{
+	const struct cli_schema_work * wk = (const struct cli_schema_work *)
+	                                    work;
+	const struct cli_dir *         dir;
+	int                            ret;
+	const struct cli_schema_show   show = {
+		.context = context,
+		.work    = wk
+	};
+
+	/* Search for the requested directory. */
+	ret = cli_dir_exec_search(&wk->search, &dir, context);
+	if (ret) {
+		/*
+		 * Searching for the current directory cannot fail. Hence,
+		 * `wk->search.orig' should always exist here.
+		 */
+		cli_assert(wk->search.orig);
+
+		cli_log("schema: '%s': %s.",
+		        wk->search.orig,
+		        cli_dir_strerror(-ret));
+
+		return ret;
 	}
 
-	return SR_ERR_OK;
+	/*
+	 * Given the directory descriptor found above, display its schema if it
+	 * matches a real libyang object (module or node)...
+	 */
+	if (cli_dir_type(dir) != CLI_DIR_NONE_TYPE)
+		return cli_schema_show_dir(dir, &show);
+
+	/* ... search the highest level children pointing to a real libyang
+	 * object and show their corresponding schemas.
+	 */
+	return cli_dir_walk((struct cli_dir *)dir,
+	                    cli_schema_show_visit,
+	                    (void *)&show);
 }
 
 static void
 cli_schema_release_work(struct cli_work *    work,
                         struct cli_context * context __cli_unused)
 {
-	cli_destroy_work(work);
+	cli_dir_fini_search(&((struct cli_schema_work *)work)->search);
 }
 
 static const struct cli_work_ops cli_schema_work_ops = {
 	.exec    = cli_schema_exec_work,
-	.release = cli_releasen_destroy_work
+	.release = cli_schema_release_work
 };
 
 static int
-cli_schema_sched_work(struct cli_context * context)
+cli_schema_parse_cmd(const struct cli_cmd * command __cli_unused,
+                     const struct cli_dir * dir __cli_unused,
+                     int                    argc,
+                     const char * const     argv[],
+                     void *                 data)
 {
-	struct cli_work * wk;
+	cli_assert(argc >= 1);
 
-	wk = cli_create_work(sizeof(*wk), &cli_schema_work_ops);
+	if (!strcmp(argv[0], "schema")) {
+		if (argc <= 2) {
+			ssize_t                  ret;
+			struct cli_schema_work * wk;
 
-	return cli_sched_work(context, wk);
-}
+			wk = (struct cli_schema_work *)
+			     cli_create_work(sizeof(*wk), &cli_schema_work_ops);
+			cli_assert(wk);
+			cli_dir_init_search(&wk->search);
 
-static int
-cli_schema_parse_cmd(const struct cli_node * node,
-                     int                     argc,
-                     const char * const      argv[],
-                     struct cli_context *    context)
-{
-	cli_assert_node(node);
-	cli_assert_args(argc, argv);
-	cli_assert_context(context);
+			ret = cli_dir_parse_search(&wk->search,
+			                           (argc == 1) ? NULL
+			                                       : argv[1]);
+			if (ret) {
+				cli_log("schema: invalid path: %s.",
+				        cli_dir_strerror(-ret));
+				goto destroy;
+			}
 
-	if (strcmp(argv[0], "schema"))
-		return 0;
+			wk->format = LYS_OUT_YANG_COMPILED;
+#warning Implement schema format option parsing support
+#if 0
+#if defined(CONFIG_CLI_DEBUG)
+			wk->format = LYS_OUT_TREE;
+#endif /* defined(CONFIG_CLI_DEBUG) */
+#endif
+			ret = cli_sched_work(data, &wk->super);
+			if (ret) {
+				cli_log("schema: cannot schedule work.");
+				goto destroy;
+			}
 
-	if (argc == 1) {
-		cli_schema_sched_work(context);
+			return argc;
 
-		return 1;
+destroy:
+			cli_destroy_work(&wk->super, data);
+
+			return ret;
+		}
+		else {
+			cli_log("schema: too many argument(s).");
+
+			return -EINVAL;
+		}
 	}
 	else
-		cli_log("schema: too many argument.");
-
-	return -EINVAL;
+		return 0;
 }
 
-static const struct cli_node_ops cli_schema_cmd_ops = {
-	.parse =   cli_schema_parse_cmd,
-	.release = cli_release_node_null
+static const struct cli_cmd_ops cli_schema_cmd_ops = {
+	.parse = cli_schema_parse_cmd,
+	.fini  = cli_cmd_null_fini
 };
 
-static struct cli_node cli_schema_cmd = CLI_NODE_SETUP(cli_schema_cmd,
-                                                       &cli_schema_cmd_ops);
+void
+cli_schema_build_cmd(struct cli_dir * directory)
+{
+	cli_dir_assert(directory);
+
+	cli_dir_add_cmd(directory, cli_cmd_create(&cli_schema_cmd_ops));
+}

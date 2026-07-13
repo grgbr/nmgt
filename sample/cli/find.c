@@ -47,7 +47,7 @@ cli_find_show_dir(struct cli_dir *    directory,
 			if (ret > 0)
 				printf("%s\n", show->path);
 			else
-				cli_log("find: cannot show some path: %s.",
+				cli_log("find: cannot show: %s.",
 				        cli_dir_strerror(-ret));
 
 			break;
@@ -73,6 +73,12 @@ cli_find_exec_work(struct cli_work * work, struct cli_context * context)
 
 	ret = cli_dir_exec_search(&wk->search, &dir, context);
 	if (ret) {
+		/*
+		 * Searching for the current directory cannot fail. Hence,
+		 * `wk->search.orig' should always exist here.
+		 */
+		cli_assert(wk->search.orig);
+
 		cli_log("find: '%s': %s.",
 		        wk->search.orig,
 		        cli_dir_strerror(-ret));
@@ -90,7 +96,7 @@ cli_find_exec_work(struct cli_work * work, struct cli_context * context)
 	return cli_dir_walk((struct cli_dir *)dir, cli_find_show_dir, &show);
 }
 
-static inline void
+static void
 cli_find_release_work(struct cli_work *    work,
                       struct cli_context * context __cli_unused)
 {

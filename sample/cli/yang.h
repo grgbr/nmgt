@@ -29,7 +29,7 @@ cli_lysc_parent(const struct lysc_node * node)
 }
 
 extern char *
-cli_lysc_xpath(const struct lysc_node * node);
+cli_lysc_node_xpath(const struct lysc_node * node);
 
 static inline const struct lysc_node *
 cli_lysc_find_node(const struct cli_context * context,
@@ -144,6 +144,9 @@ cli_lysc_print_nodeset_diag(const struct cli_context * context,
  ******************************************************************************/
 
 struct lys_module;
+
+extern char *
+cli_lys_module_xpath(const struct lys_module * module);
 
 /*
  * Return YANG implemented module given by name, excluding sysrepo / libyang

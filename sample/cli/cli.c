@@ -2,6 +2,7 @@
 #include "list.h"
 #include "find.h"
 #include "xpath.h"
+#include "schema.h"
 #include <sys/ioctl.h>
 
 /******************************************************************************
@@ -156,6 +157,24 @@ cli_init_context(struct cli_context * context)
 
 	cli_setup_log(CONFIG_CLI_LOG_LEVEL);
 
+#if defined(CONFIG_CLI_DEBUG)
+	/*
+	 * SR_CTX_SET_PRIV_PARSED is required to print YANG diagram trees.
+	 * In addition, SR_CTX_SET_PRIV_PARSED is activated for non-printed
+	 * contexts only.
+	 * This is why the SR_CTX_NO_PRINTED option must also be
+	 * passed at the expense of reduced performances.
+	 */
+	err = sr_context_options(SR_CTX_NO_PRINTED | SR_CTX_SET_PRIV_PARSED,
+	                         1,
+	                         NULL);
+	if (err != SR_ERR_OK) {
+		cli_log("cannot setup repo context options: %s",
+		        sr_strerror(err));
+		return err;
+	}
+#endif /* defined(CONFIG_CLI_DEBUG) */
+
 	err = sr_connect(SR_CONN_DEFAULT, &context->conn);
 	if (err != SR_ERR_OK) {
 		cli_log("cannot open repo connection: %s",
@@ -184,7 +203,7 @@ cli_init_context(struct cli_context * context)
 	}
 
 	context->wkcnt = 0;
-	_cli_dir_init(&context->root, "/", sizeof("/") - 1);
+	cli_dir_init_root(&context->root);
 	context->cwd = &context->root;
 	context->isatty = !!isatty(STDOUT_FILENO);
 
@@ -217,7 +236,7 @@ cli_fini_context(struct cli_context * context)
 
 	cli_release_workq(context);
 	cli_dir_walk_safe(&context->root, cli_visitn_destroy_dir, NULL);
-	cli_dir_fini(&context->root);
+	cli_dir_fini_root(&context->root);
 	ly_out_free(context->lyout, NULL, 0);
 	sr_session_release_context(context->sess);
 	sr_session_stop(context->sess);
@@ -249,24 +268,23 @@ cli_build_tree_dir(struct cli_context * context,
 
 	switch (node->nodetype) {
 	case LYS_CONTAINER:
+	case LYS_LIST:
 		if (event == CLI_WALK_PRE_EVT) {
 			struct cli_dir * dir;
 
-			dir = cli_dir_create(node->name);
+			dir = cli_dir_create_node(node->name, node);
 			if (!dir) {
 				char * xpath;
 
-				xpath = cli_lysc_xpath(node);
+				xpath = cli_lysc_node_xpath(node);
 				cli_log("'%s': "
-				        "failed to create directory entry: %s",
-				        xpath,
-				        strerror(ENAMETOOLONG));
+				        "cannot create node directory entry.",
+				        xpath);
 				cli_free(xpath);
 
 				return -ENAMETOOLONG;
 			}
 
-			dir->lysc = node;
 			cli_dir_add_child(build->parent, dir);
 
 			build->parent = dir;
@@ -280,7 +298,7 @@ cli_build_tree_dir(struct cli_context * context,
 		if (event == CLI_WALK_PRE_EVT) {
 			char * xpath;
 
-			xpath = cli_lysc_xpath(node);
+			xpath = cli_lysc_node_xpath(node);
 			cli_log("'%s': %s support not implemented !",
 			        xpath,
 			        cli_ly_nodetype_str(node->nodetype));
@@ -299,7 +317,7 @@ cli_init(struct cli_context * context)
 	int                       ret;
 	unsigned int              m;
 	const struct lys_module * mod;
-	struct cli_tree_builder   build = { .parent = &context->root };
+	struct cli_tree_builder   build;
 
 	ret = cli_init_context(context);
 	if (ret)
@@ -308,8 +326,27 @@ cli_init(struct cli_context * context)
 	cli_list_build_cmd(&context->root);
 	cli_find_build_cmd(&context->root);
 	cli_xpath_build_cmd(&context->root);
+	cli_schema_build_cmd(&context->root);
 
 	cli_lys_foreach_module(context, m, mod) {
+		struct cli_dir * dir;
+
+		dir = cli_dir_create_module(mod->name, mod);
+		if (!dir) {
+			char * xpath;
+
+			xpath = cli_lys_module_xpath(mod);
+			cli_log("'%s': cannot create module directory entry.",
+			        xpath);
+			cli_free(xpath);
+
+			ret = -ENOTSUP;
+			goto fini;
+		}
+
+		cli_dir_add_child(&context->root, dir);
+
+		build.parent = dir;
 		ret = cli_lys_walk_module(context,
 		                          mod,
 		                          cli_build_tree_dir,

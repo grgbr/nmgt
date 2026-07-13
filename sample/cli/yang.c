@@ -55,6 +55,18 @@ cli_ly_basetype_str(LY_DATA_TYPE basetype)
  * Libyang module handling
  ******************************************************************************/
 
+char *
+cli_lys_module_xpath(const struct lys_module * module)
+{
+	char * xpath;
+
+	if (asprintf(&xpath, "/%s", module->name) < 0)
+		/* Memory allocation failure... */
+		abort();
+
+	return xpath;
+}
+
 const struct lys_module *
 cli_lys_find_module(const struct cli_context * context, const char * module)
 {
@@ -142,7 +154,7 @@ cli_lys_print_module_diag(const struct cli_context * context,
  ******************************************************************************/
 
 char *
-cli_lysc_xpath(const struct lysc_node * node)
+cli_lysc_node_xpath(const struct lysc_node * node)
 {
 	char * xpath;
 

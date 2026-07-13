@@ -9,6 +9,7 @@
 #define CONFIG_CLI_ASSERT 1
 #define CONFIG_CLI_LOG 1
 #define CONFIG_CLI_LOG_LEVEL 5
+#define CONFIG_CLI_DEBUG 1
 
 /*
  * Maximum size available to store a command line including the terminating NULL

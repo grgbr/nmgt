@@ -6,6 +6,7 @@
 #include <string.h>
 
 struct cli_cmd;
+struct cli_context;
 
 #define CLI_DIR_PATH_MAX (512)
 #if CLI_DIR_PATH_MAX > CLI_LINE_MAX
@@ -13,6 +14,13 @@ struct cli_cmd;
 #undef CLI_DIR_NAME_MAX
 #define CLI_DIR_NAME_MAX CLI_LINE_MAX
 #endif
+
+enum cli_dir_type {
+	CLI_DIR_NONE_TYPE,
+	CLI_DIR_NODE_TYPE,
+	CLI_DIR_MOD_TYPE,
+	CLI_DIR_TYPE_NR
+};
 
 struct cli_dir {
 	/* This directory path component. */
@@ -29,8 +37,13 @@ struct cli_dir {
 	struct cli_cmd *         hcmd;
 	/* Command singly linked list tail. */
 	struct cli_cmd *         tcmd;
-	/* Libyang schema node related to this directory entry. */
-	const struct lysc_node * lysc;
+	enum cli_dir_type        type;
+	/* Libyang schema module or node related to this directory entry. */
+	union {
+		const struct lysc_node *  sch_node;
+		const struct lys_module * sch_mod;
+		const void *              sch_void;
+	};
 };
 
 #define cli_dir_assert(_dir) \
@@ -38,30 +51,31 @@ struct cli_dir {
 	cli_assert(((_dir)->name[0] != '\0') && \
 	           (strnlen((_dir)->name, CLI_PATH_NAME_MAX) < \
 	            CLI_PATH_NAME_MAX)); \
-	cli_assert(!(_dir)->hcmd || (_dir)->tcmd)
-
-/*
- * TODO:
- * static_assert(sizeof(_name) <= CLI_PATH_NAME_MAX)
- * see static_assert(3)
- */
-#define CLI_DIR_INIT(_dir, _name) \
-	{ \
-		.name   = _name, \
-		.next   = NULL, \
-		.prev   = _dir, \
-		.child  = NULL, \
-		.parent = NULL, \
-		.hcmd   = NULL, \
-		.tcmd   = NULL, \
-		.lysc   = NULL, \
-	}
+	cli_assert(!(_dir)->hcmd || (_dir)->tcmd); \
+	cli_assert(((_dir)->type == CLI_DIR_NONE_TYPE) || \
+	           ((_dir)->type == CLI_DIR_MOD_TYPE) || \
+	           ((_dir)->type == CLI_DIR_NODE_TYPE)); \
+	cli_assert(((_dir)->type == CLI_DIR_NONE_TYPE) || (_dir)->sch_void);
 
 static inline const char *
 cli_dir_strerror(int error)
 {
-	return (error == ENOENT) ? "no such directory"
-	                         : cli_path_strerror(error);
+	switch (error) {
+	case ENOENT:
+		return "no such directory";
+	case EBADR:
+		return "internal YANG error";
+	default:
+		return cli_path_strerror(error);
+	}
+}
+
+static inline enum cli_dir_type
+cli_dir_type(const struct cli_dir * directory)
+{
+	cli_dir_assert(directory);
+
+	return directory->type;
 }
 
 static inline bool
@@ -114,6 +128,13 @@ cli_dir_mkabs(const struct cli_dir * directory, char * path, size_t size);
 extern char *
 cli_dir_xpath(const struct cli_dir * directory);
 
+extern int
+cli_dir_show_yang(const struct cli_dir *     directory,
+                  const struct cli_context * context);
+
+extern int
+cli_dir_show_diag(const struct cli_dir *     directory,
+                  const struct cli_context * context);
 
 typedef int cli_dir_visit_fn(struct cli_dir *, enum cli_walk_event, void *);
 
@@ -154,16 +175,37 @@ extern void
 cli_dir_add_cmd(struct cli_dir * directory, struct cli_cmd * command);
 
 extern void
-_cli_dir_init(struct cli_dir * directory, const char * name, size_t length);
-
-extern int
-cli_dir_init(struct cli_dir * directory, const char * name);
+cli_dir_init_root(struct cli_dir * root);
 
 extern void
-cli_dir_fini(struct cli_dir * directory);
+cli_dir_fini_root(struct cli_dir * root);
 
 extern struct cli_dir *
-cli_dir_create(const char * name);
+cli_dir_create(const char * name, enum cli_dir_type type, const void * schema);
+
+static inline struct cli_dir *
+cli_dir_create_none(const char * name)
+{
+	cli_assert(name);
+
+	return cli_dir_create(name, CLI_DIR_NONE_TYPE, NULL);
+}
+
+static inline struct cli_dir *
+cli_dir_create_node(const char * name, const struct lysc_node * node)
+{
+	cli_assert(name);
+
+	return cli_dir_create(name, CLI_DIR_NODE_TYPE, node);
+}
+
+static inline struct cli_dir *
+cli_dir_create_module(const char * name, const struct lys_module * module)
+{
+	cli_assert(name);
+
+	return cli_dir_create(name, CLI_DIR_MOD_TYPE, module);
+}
 
 extern void
 cli_dir_destroy(struct cli_dir * directory);
@@ -171,8 +213,6 @@ cli_dir_destroy(struct cli_dir * directory);
 /******************************************************************************
  * Directory search logic for commands usage.
  ******************************************************************************/
-
-struct cli_context;
 
 struct cli_dir_search {
 	struct cli_path path;

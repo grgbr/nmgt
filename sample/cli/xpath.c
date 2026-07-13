@@ -24,7 +24,7 @@ cli_xpath_exec_work(struct cli_work * work, struct cli_context * context)
 	ret = cli_dir_exec_search(&wk->search, &dir, context);
 	if (ret) {
 		/*
-		 *  Searching for the current directory cannot fail. Hence,
+		 * Searching for the current directory cannot fail. Hence,
 		 * `wk->search.orig' should always exist here.
 		 */
 		cli_assert(wk->search.orig);
@@ -48,7 +48,7 @@ cli_xpath_exec_work(struct cli_work * work, struct cli_context * context)
 	return 0;
 }
 
-static inline void
+static void
 cli_xpath_release_work(struct cli_work *    work,
                        struct cli_context * context __cli_unused)
 {
