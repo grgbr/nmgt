@@ -2,10 +2,10 @@
 #define _CLI_DIR_H
 
 #include "path.h"
+#include "cmd.h"
 #include <stdbool.h>
 #include <string.h>
 
-struct cli_cmd;
 struct cli_context;
 
 #define CLI_DIR_PATH_MAX (512)
@@ -33,10 +33,8 @@ struct cli_dir {
 	struct cli_dir *         child;
 	/* Parent directory entry. */
 	struct cli_dir *         parent;
-	/* Command singly linked list head. */
-	struct cli_cmd *         hcmd;
-	/* Command singly linked list tail. */
-	struct cli_cmd *         tcmd;
+	/* Command linked list head. */
+	struct cli_cmd *         cmds;
 	enum cli_dir_type        type;
 	/* Libyang schema module or node related to this directory entry. */
 	union {
@@ -51,7 +49,6 @@ struct cli_dir {
 	cli_assert(((_dir)->name[0] != '\0') && \
 	           (strnlen((_dir)->name, CLI_PATH_NAME_MAX) < \
 	            CLI_PATH_NAME_MAX)); \
-	cli_assert(!(_dir)->hcmd || (_dir)->tcmd); \
 	cli_assert(((_dir)->type == CLI_DIR_NONE_TYPE) || \
 	           ((_dir)->type == CLI_DIR_MOD_TYPE) || \
 	           ((_dir)->type == CLI_DIR_NODE_TYPE)); \
@@ -164,15 +161,22 @@ cli_dir_search(const struct cli_dir ** directory, const char * path);
 
 extern int
 cli_dir_parse_cmd(const struct cli_dir * directory,
+                  struct cli_context *   context,
                   int                    argc,
-                  const char * const     argv[],
-                  void *                 data);
+                  const char * const     argv[]);
 
 extern void
 cli_dir_add_child(struct cli_dir * directory, struct cli_dir * child);
 
-extern void
-cli_dir_add_cmd(struct cli_dir * directory, struct cli_cmd * command);
+static inline void
+cli_dir_add_cmd(struct cli_dir * directory, struct cli_cmd * command)
+{
+	cli_dir_assert(directory);
+	cli_cmd_assert(command);
+
+	cli_node_add_sibling((struct cli_node **)&directory->cmds,
+	                     &command->super);
+}
 
 extern void
 cli_dir_init_root(struct cli_dir * root);

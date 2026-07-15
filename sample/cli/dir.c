@@ -1,5 +1,4 @@
 #include "dir.h"
-#include "cmd.h"
 #include "yang.h"
 #include <errno.h>
 
@@ -342,20 +341,22 @@ fini:
 
 int
 cli_dir_parse_cmd(const struct cli_dir * directory,
+                  struct cli_context *   context,
                   int                    argc,
-                  const char * const     argv[],
-                  void *                 data)
+                  const char * const     argv[])
 {
 	cli_dir_assert(directory);
 	cli_assert_args(argc, argv);
 
-	const struct cli_cmd * cmd;
-	int                    ret = 0;
+	const struct cli_node * cmd;
+	int                     ret = 0;
 
-	cli_cmd_foreach(directory->hcmd, cmd) {
-		cli_cmd_assert(cmd);
-
-		ret = cli_cmd_parse(cmd, directory, argc, argv, data);
+	cli_node_foreach_sibling((struct cli_node *)directory->cmds, cmd) {
+		ret = cli_cmd_parse((const struct cli_cmd *)cmd,
+		                    directory,
+		                    context,
+		                    argc,
+		                    argv);
 		if (ret)
 			break;
 	}
@@ -394,23 +395,6 @@ cli_dir_add_child(struct cli_dir * directory, struct cli_dir * child)
 	child->parent = directory;
 }
 
-void
-cli_dir_add_cmd(struct cli_dir * directory, struct cli_cmd * command)
-{
-	cli_dir_assert(directory);
-	cli_cmd_assert(command);
-	cli_assert(!command->next);
-
-	if (directory->hcmd) {
-		directory->tcmd->next = command;
-		directory->tcmd = command;
-	}
-	else {
-		directory->hcmd = command;
-		directory->tcmd = command;
-	}
-}
-
 static void
 _cli_dir_init(struct cli_dir *  directory,
               const char *      name,
@@ -431,8 +415,7 @@ _cli_dir_init(struct cli_dir *  directory,
 	directory->prev = directory;
 	directory->child = NULL;
 	directory->parent = NULL;
-	directory->hcmd = NULL;
-	directory->tcmd = NULL;
+	directory->cmds = NULL;
 	directory->type = type;
 	directory->sch_void = schema;
 }
@@ -468,11 +451,13 @@ cli_dir_fini(struct cli_dir * directory)
 {
 	cli_dir_assert(directory);
 
-	struct cli_cmd * cmd;
-	struct cli_cmd * tmp;
+	struct cli_node * cmd;
+	struct cli_node * tmp;
 
-	cli_cmd_foreach_safe(directory->hcmd, cmd, tmp)
-		cli_cmd_destroy(cmd);
+	cli_node_foreach_sibling_safe((struct cli_node *)directory->cmds,
+	                              cmd,
+	                              tmp)
+		cli_cmd_destroy((struct cli_cmd *)cmd);
 }
 
 void

@@ -69,7 +69,7 @@ cli_parse(struct cli_context * context, int argc, const char * const argv[])
 	cli_assert_context(context);
 	cli_assert_args(argc, argv);
 
-	return cli_dir_parse_cmd(context->cwd, argc, argv, context);
+	return cli_dir_parse_cmd(context->cwd, context, argc, argv);
 }
 
 #if defined(CONFIG_CLI_LOG)
@@ -323,10 +323,10 @@ cli_init(struct cli_context * context)
 	if (ret)
 		return ret;
 
-	cli_list_build_cmd(&context->root);
+	//cli_list_build_cmd(&context->root);
 	cli_find_build_cmd(&context->root);
-	cli_xpath_build_cmd(&context->root);
-	cli_schema_build_cmd(&context->root);
+	//cli_xpath_build_cmd(&context->root);
+	//cli_schema_build_cmd(&context->root);
 
 	cli_lys_foreach_module(context, m, mod) {
 		struct cli_dir * dir;

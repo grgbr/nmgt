@@ -1,91 +1,79 @@
 #ifndef _CLI_CMD_H
 #define _CLI_CMD_H
 
-#include "common.h"
+#include "arg.h"
 
 struct cli_cmd;
 struct cli_dir;
+struct cli_context;
 
 typedef int cli_cmd_parse_fn(const struct cli_cmd *,
                              const struct cli_dir *,
+                             struct cli_context *,
                              int,
-                             const char * const [],
-                             void *);
-
-typedef void cli_cmd_fini_fn(struct cli_cmd *);
+                             const char * const []);
 
 struct cli_cmd_ops {
 	cli_cmd_parse_fn * parse;
-	cli_cmd_fini_fn *  fini;
 };
 
 #define cli_cmd_assert_ops(_ops) \
 	cli_assert(_ops); \
-	cli_assert((_ops)->parse); \
-	cli_assert((_ops)->fini)
+	cli_assert((_ops)->parse)
 
 struct cli_cmd {
-	struct cli_cmd *           next;
+	struct cli_node            super;
 	const struct cli_cmd_ops * ops;
+	const char *               name;
 };
 
 #define cli_cmd_assert(_cmd) \
 	cli_assert(_cmd); \
-	cli_cmd_assert_ops((_cmd)->ops)
+	cli_node_assert(&(_cmd)->super); \
+	cli_cmd_assert_ops((_cmd)->ops); \
+	cli_assert((_cmd)->name); \
+	cli_assert((_cmd)->name[0] != '\0'); \
+	cli_assert(strnlen((_cmd)->name, CLI_ARG_MAX) < CLI_ARG_MAX)
 
-#define CLI_CMD_INIT(_opers) \
-	{ .next = NULL, .ops = _opers }
+#define cli_cmd_log(_cmd, _format, ...) \
+	cli_log("%s: " _format, (_cmd)->name, ## __VA_ARGS__)
 
-#define cli_cmd_foreach(_first, _cmd) \
-	for (_cmd = _first; _cmd; _cmd = (_cmd)->next)
+extern int
+cli_cmd_parse_args(const struct cli_cmd * command,
+                   const struct cli_dir * directory,
+                   struct cli_context *   context,
+                   int                    argc,
+                   const char * const     argv[],
+                   void *                 data);
 
-#define cli_cmd_foreach_safe(_first, _cmd, _tmp) \
-	for (_cmd = _first; \
-	     (_cmd) && (_tmp = (_cmd)->next, 1); \
-	     _cmd = _tmp)
-
-static inline int
+extern int
 cli_cmd_parse(const struct cli_cmd * command,
               const struct cli_dir * dir,
+              struct cli_context *   context,
               int                    argc,
-              const char * const     argv[],
-              void *                 data)
-{
-	cli_cmd_assert(command);
-	cli_assert(dir);
-	cli_assert_args(argc, argv);
-
-	return command->ops->parse(command, dir, argc, argv, data);
-}
+              const char * const     argv[]);
 
 static inline void
-cli_cmd_init(struct cli_cmd * command, const struct cli_cmd_ops * opers)
-{
-	cli_assert(command);
-	cli_cmd_assert_ops(opers);
-
-	command->next = NULL;
-	command->ops = opers;
-}
-
-extern void cli_cmd_null_fini(struct cli_cmd * command);
-
-static inline void
-cli_cmd_fini(struct cli_cmd * command)
+cli_cmd_add_arg(struct cli_cmd * command, struct cli_arg * argument)
 {
 	cli_cmd_assert(command);
+	cli_arg_assert(argument);
 
-	command->ops->fini(command);
+	cli_node_add_child(&command->super, &argument->super);
 }
 
-extern struct cli_cmd *
-cli_cmd_build(size_t size, const struct cli_cmd_ops * opers);
+extern int
+cli_cmd_init(struct cli_cmd *           command,
+             const char *               name,
+             const struct cli_cmd_ops * opers);
 
-static inline struct cli_cmd *
-cli_cmd_create(const struct cli_cmd_ops * opers)
-{
-	return cli_cmd_build(sizeof(struct cli_cmd), opers);
-}
+extern void
+cli_cmd_fini(struct cli_cmd * command);
+
+extern int
+cli_cmd_create(struct cli_cmd **          command,
+               const char *               name,
+               const struct cli_cmd_ops * opers);
 
 static inline void
 cli_cmd_destroy(struct cli_cmd * command)

@@ -3,6 +3,7 @@
 
 #define _GNU_SOURCE
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <errno.h>
 
@@ -26,7 +27,15 @@
  * Utilities
  ******************************************************************************/
 
+#include <stdio.h>
+
 #define __cli_unused __attribute__((__unused__))
+
+#define cli_containerof(_ptr, _type, _member) \
+	({ \
+		const typeof(((_type *)0)->_member) * __ptr = (_ptr); \
+		(_type *)((const char *)__ptr - offsetof(_type, _member)); \
+	})
 
 #if defined(CONFIG_CLI_ASSERT)
 #include <assert.h>
@@ -73,14 +82,5 @@ cli_free(void * data)
 {
 	free(data);
 }
-
-#define CLI_WALK_CONT_RET (0)
-#define CLI_WALK_SKIP_RET (1)
-
-enum cli_walk_event {
-	CLI_WALK_PRE_EVT,
-	CLI_WALK_POST_EVT,
-	CLI_WALK_EVT_NR
-};
 
 #endif /* _CLI_COMMON_H */

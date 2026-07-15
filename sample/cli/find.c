@@ -196,9 +196,26 @@ destroy:
 		return 0;
 }
 
+static int
+cli_find_parse_cmd(const struct cli_cmd * command,
+                   const struct cli_dir * directory,
+                   struct cli_context *   context,
+                   int                    argc,
+                   const char * const     argv[])
+{
+	int ret;
+
+	ret = cli_cmd_parse_args(command,
+	                         directory,
+	                         context,
+	                         argc,
+	                         argv,
+	                         work);
+
+}
+
 static const struct cli_cmd_ops cli_find_cmd_ops = {
 	.parse = cli_find_parse_cmd,
-	.fini  = cli_cmd_null_fini
 };
 
 void
@@ -206,5 +223,184 @@ cli_find_build_cmd(struct cli_dir * directory)
 {
 	cli_dir_assert(directory);
 
-	cli_dir_add_cmd(directory, cli_cmd_create(&cli_find_cmd_ops));
+	struct cli_cmd * cmd;
+	struct cli_arg * arg;
+
+	/*
+	 * No need to check for returned code since cli_cmd_create() cannot fail
+	 * with the "find" name argument.
+	 */
+	cli_assert(sizeof("find") <= CLI_ARG_MAX);
+	cli_cmd_create(&cmd, "find", &cli_find_cmd_ops);
+	cli_assert(cmd);
+
+	/* Cannot fail either. */
+	arg = cli_arg_create(&cli_path_arg_ops);
+	cli_assert(arg);
+	cli_cmd_add_arg(cmd, arg);
+
+	cli_dir_add_cmd(directory, cmd);
+}
+
+/******************************************************************************/
+
+TODO: del cli_dir_search logic and replace by this one !!
+
+struct cli_dir_work {
+	/* Base work unit structure. */
+	struct cli_work        super;
+	/* Internal state of requested path search. */
+	struct cli_path        path;
+	/* Pointer to original path argument. */
+	const char *           orig;
+	/* Length of `norm' field, excluding the terminating NULL byte. */
+	size_t                 len;
+	/* Validated normalized requested path. */
+	char                   norm[CLI_PATH_MAX];
+	/* The command that initiated this work. */
+	const struct cli_cmd * cmd;
+};
+
+int
+cli_dir_work_search(struct cli_dir_work *   work,
+                    struct cli_context *    context,
+                    const struct cli_dir ** directory)
+{
+	const struct cli_dir * dir = cli_cwd(context);
+
+	if (cli_path_comp_count(&work->path)) {
+		int ret;
+
+		cli_assert(work->orig);
+		if (work->orig[0] == '/')
+			dir = &context->root;
+
+		ret = cli_dir_search_from_path(&dir, &work->path);
+		if (ret) {
+			/*
+			 * Searching for the current directory cannot fail.
+			 * Hence, `wk->orig' should always be a non-empty
+			 * string.
+			 */
+			cli_assert(wk->orig && (wk->orig[0] != '\0'));
+			cli_cmd_log(wk->cmd,
+			            "'%s': %s.",
+			            wk->orig,
+			            cli_dir_strerror(-ret));
+
+			return ret;
+		}
+	}
+
+	*directory = dir;
+
+	return 0;
+}
+
+int
+cli_dir_work_parse(struct cli_dir_work * work,
+                   int                   argc,
+                   const char * const    argv[],
+                   bool                  mandatory)
+{
+	cli_assert(work);
+	cli_assert(!work->orig);
+	cli_assert(!work->len);
+	cli_assert(work->norm[0] == '\0');
+	cli_assert(work->cmd);
+	cli_assert(argc >= 1);
+	cli_assert(argv[0]);
+
+	const char * path = argv[0];
+	ssize_t      ret = 0;
+
+	if (*path != '\0') {
+		ret = cli_path_parse(&work->path, path);
+		if (ret)
+			goto out;
+
+		if (*path == '/') {
+			ret = cli_path_mkabs(&work->path,
+			                     work->norm,
+			                     sizeof(work->norm));
+			cli_assert(ret >= 0);
+			if (ret && (work->norm[ret - 1] != '/')) {
+				if ((size_t)(ret + 1) >= sizeof(work->norm)) {
+					ret = -ENAMETOOLONG;
+					goto out;
+				}
+
+				work->norm[ret++] = '/';
+			}
+		}
+		else {
+			ret = cli_path_mkrel(&work->path,
+			                     work->norm,
+			                     sizeof(work->norm));
+			cli_assert(ret >= 0);
+		}
+
+		work->len = (size_t)ret;
+		work->norm[ret] = '\0';
+	}
+
+	work->orig = path;
+
+	return 1;
+
+out:
+	if (!mandatory)
+		return 0;
+
+	cli_cmd_log(work->cmd,
+	            "'%s': invalid path argument: %s.",
+	            path,
+	            cli_path_strerror(-ret));
+
+	return (int)ret;
+}
+
+struct cli_dir_work *
+cli_dir_work_create(size_t                      size,
+                    const struct cli_cmd *      command,
+                    const struct cli_work_ops * opers)
+{
+	cli_assert(size >= sizeof(struct cli_dir_work));
+	cli_cmd_assert(command);
+	cli_assert_work_ops(opers);
+
+	struct cli_dir_work * wk;
+
+	wk = (struct cli_dir_work *)cli_create_work(size, opers);
+	cli_assert(wk);
+
+	cli_path_init(&wk->path);
+	wk->orig = NULL;
+	wk->len = 0;
+	wk->norm[0] = '\0';
+	wk->cmd = command;
+
+	return wk;
+}
+
+static void
+cli_dir_work_fini(struct cli_dir_work * work)
+{
+	cli_assert(work);
+
+	cli_path_fini(&work->path);
+}
+
+void
+cli_dir_work_destroy(struct cli_dir_work * work)
+{
+	cli_dir_work_fini(work);
+	cli_destroy_work(&work->super);
+}
+
+void
+cli_dir_work_release(struct cli_work *    work,
+                     struct cli_context * context __cli_unused)
+{
+	cli_dir_work_fini((struct cli_dir_work *)work);
 }

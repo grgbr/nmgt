@@ -2,9 +2,9 @@
 
 #if defined(CONFIG_CLI_ASSERT)
 
+#include "arg.h"
 #include <stdbool.h>
 #include <ctype.h>
-#include <string.h>
 
 static bool
 cli_ischr_valid(int chr)
@@ -15,7 +15,7 @@ cli_ischr_valid(int chr)
 void
 cli_assert_args(int argc, const char * const argv[])
 {
-	cli_assert(argc);
+	cli_assert(argc > 0);
 	cli_assert(argv);
 
 	int    a;
@@ -24,8 +24,10 @@ cli_assert_args(int argc, const char * const argv[])
 	for (a = 0, len = 0; a < argc; a++) {
 		cli_assert(argv[a]);
 
-		size_t       alen = strnlen(argv[a], CLI_LINE_MAX);
+		size_t       alen = strnlen(argv[a], CLI_ARG_MAX);
 		unsigned int c;
+
+		cli_assert(alen < CLI_ARG_MAX);
 
 		len += alen;
 		cli_assert(len < CLI_LINE_MAX);
