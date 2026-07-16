@@ -18,13 +18,14 @@ cli_arg_setup(struct cli_arg * argument, const struct cli_arg_ops * opers)
 }
 
 struct cli_arg *
-cli_arg_create(const struct cli_arg_ops * opers)
+cli_arg_create(size_t size, const struct cli_arg_ops * opers)
 {
+	cli_assert(size >= sizeof(struct cli_arg));
 	cli_arg_assert_ops(opers);
 
 	struct cli_arg * arg;
 
-	arg = cli_malloc(sizeof(*arg));
+	arg = cli_malloc(size);
 	cli_assert(arg);
 
 	cli_arg_setup(arg, opers);

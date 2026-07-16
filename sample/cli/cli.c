@@ -35,7 +35,7 @@ cli_release_workq(struct cli_context * context)
 	unsigned int w;
 
 	for (w = 0; w < context->wkcnt; w++)
-		cli_destroy_work(context->wkq[w], context);
+		cli_destroy_work(context->wkq[w]);
 
 	context->wkcnt = 0;
 }

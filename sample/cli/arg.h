@@ -72,7 +72,7 @@ cli_arg_add_child(struct cli_arg * argument, struct cli_arg * child)
 }
 
 extern struct cli_arg *
-cli_arg_create(const struct cli_arg_ops * opers);
+cli_arg_create(size_t size, const struct cli_arg_ops * opers);
 
 static inline void
 cli_arg_destroy(struct cli_arg * argument)

@@ -218,34 +218,48 @@ cli_dir_destroy(struct cli_dir * directory);
  * Directory search logic for commands usage.
  ******************************************************************************/
 
-struct cli_dir_search {
-	struct cli_path path;
-	const char *    orig;
+#include "work.h"
+
+struct cli_dir_work {
+	/* Base work structure. */
+	struct cli_work        super;
+	/* The command that initiated this work. */
+	const struct cli_cmd * cmd;
+	/* Internal state of requested path search. */
+	struct cli_path        path;
+	/* Pointer to original path argument. */
+	const char *           orig;
+	/* Length of `norm' field, excluding the terminating NULL byte. */
+	size_t                 len;
+	/* Validated normalized requested path. */
+	char                   norm[CLI_PATH_MAX];
 };
 
 extern int
-cli_dir_exec_search(const struct cli_dir_search * search,
-                    const struct cli_dir **       directory,
-                    const struct cli_context *    context);
+cli_dir_work_search(struct cli_dir_work *   work,
+                    struct cli_context *    context,
+                    const struct cli_dir ** directory);
 
 extern int
-cli_dir_parse_search(struct cli_dir_search * search, const char * path);
+cli_dir_work_parse(struct cli_dir_work *   work,
+                   int                     argc,
+                   const char * const      argv[],
+                   bool                    mandatory);
 
-static inline void
-cli_dir_init_search(struct cli_dir_search * search)
-{
-	cli_assert(search);
+extern struct cli_dir_work *
+cli_dir_work_create(size_t                      size,
+                    const struct cli_cmd *      command,
+                    const struct cli_work_ops * opers);
 
-	cli_path_init(&search->path);
-	search->orig = NULL;
-}
+extern void
+cli_dir_work_destroy(struct cli_dir_work * work);
 
-static inline void
-cli_dir_fini_search(struct cli_dir_search * search)
-{
-	cli_assert(search);
+extern void
+cli_dir_work_release(struct cli_work * work);
 
-	cli_path_fini(&((struct cli_dir_search *)search)->path);
-}
+struct cli_dir_work_arg;
 
-#endif  /* _CLI_DIR_H */
+extern struct cli_dir_search_arg *
+cli_dir_search_create_arg(bool mandatory);
+
+#endif /* _CLI_DIR_H */
