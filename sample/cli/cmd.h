@@ -75,6 +75,12 @@ cli_cmd_create(struct cli_cmd **          command,
                const char *               name,
                const struct cli_cmd_ops * opers);
 
+extern int
+cli_cmd_createn_add(struct cli_cmd **          command,
+                    const char *               name,
+                    const struct cli_cmd_ops * opers,
+                    struct cli_dir *           directory);
+
 static inline void
 cli_cmd_destroy(struct cli_cmd * command)
 {

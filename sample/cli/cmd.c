@@ -4,8 +4,6 @@
 static bool
 cli_cmd_has_args(const struct cli_cmd * command)
 {
-	cli_cmd_assert(command);
-
 	return cli_node_has_child(&command->super);
 }
 
@@ -85,8 +83,6 @@ cli_cmd_parse(const struct cli_cmd * command,
 	int ret = 0;
 
 	if (!strcmp(argv[0], command->name)) {
-		int ret;
-
 		ret = command->ops->parse(command,
 		                          directory,
 		                          context,
@@ -150,6 +146,8 @@ cli_cmd_destroy_arg(struct cli_node *   node,
 void
 cli_cmd_fini(struct cli_cmd * command)
 {
+	cli_cmd_assert(command);
+
 	cli_node_walk_safe(&command->super, cli_cmd_destroy_arg, NULL);
 }
 
@@ -158,6 +156,10 @@ cli_cmd_create(struct cli_cmd **          command,
                const char *               name,
                const struct cli_cmd_ops * opers)
 {
+	cli_assert(command);
+	cli_assert(name);
+	cli_cmd_assert_ops(opers);
+
 	struct cli_cmd * cmd;
 	int              err;
 
@@ -168,6 +170,28 @@ cli_cmd_create(struct cli_cmd **          command,
 		return err;
 
 	*command = cmd;
+
+	return 0;
+}
+
+int
+cli_cmd_createn_add(struct cli_cmd **          command,
+                    const char *               name,
+                    const struct cli_cmd_ops * opers,
+                    struct cli_dir *           directory)
+{
+	cli_assert(command);
+	cli_assert(name);
+	cli_cmd_assert_ops(opers);
+	cli_dir_assert(directory);
+
+	int ret;
+
+	ret = cli_cmd_create(command, name, opers);
+	if (ret)
+		return ret;
+
+	cli_dir_add_cmd(directory, *command);
 
 	return 0;
 }

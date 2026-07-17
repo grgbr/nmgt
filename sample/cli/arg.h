@@ -11,6 +11,10 @@ struct cli_cmd;
 struct cli_dir;
 struct cli_context;
 
+/******************************************************************************
+ * Base argument handling
+ ******************************************************************************/
+
 typedef int cli_arg_parse_fn(const struct cli_arg *,
                              const struct cli_cmd *,
                              const struct cli_dir *,
@@ -82,42 +86,72 @@ cli_arg_destroy(struct cli_arg * argument)
 	cli_free(argument);
 }
 
-struct cli_arg_key {
+/******************************************************************************
+ * Parameter argument handling
+ ******************************************************************************/
+
+struct cli_arg_parm {
 	struct cli_arg super;
 	const char *   name;
 	size_t         len;
 };
 
-#define cli_arg_assert_key(_arg) \
-	cli_assert(_arg); \
-	cli_arg_assert(&(_arg)->super); \
-	cli_assert((_arg)->name); \
-	cli_assert((_arg)->len); \
-	cli_assert((_arg)->len < CLI_ARG_MAX); \
-	cli_assert(strnlen((_arg)->name, CLI_ARG_MAX) == (_arg)->len)
+extern int
+cli_arg_create_parm(struct cli_arg_parm **     parameter,
+                    const char *               name,
+                    const struct cli_arg_ops * opers);
 
 extern int
-cli_arg_create_key(struct cli_arg_key **      key,
-                   const char *               name,
-                   const struct cli_arg_ops * opers);
+cli_arg_createn_add_parm(struct cli_arg_parm **     parameter,
+                         const char *               name,
+                         const struct cli_arg_ops * opers,
+                         struct cli_node *          cmd_or_arg);
 
-static inline void
-cli_arg_destroy_key(struct cli_arg_key * key)
-{
-	cli_arg_assert_key(key);
-
-	cli_arg_destroy(&key->super);
-}
+/******************************************************************************
+ * Choice argument handling
+ ******************************************************************************/
 
 extern struct cli_arg *
 cli_arg_create_choice(void);
 
-extern int
-cli_arg_create_keyopt(struct cli_arg_key ** keyopt, const char * name);
+extern struct cli_arg *
+cli_arg_createn_add_choice(struct cli_node * cmd_or_arg);
+
+/******************************************************************************
+ * Keyword parameter argument handling
+ ******************************************************************************/
+
+struct cli_arg_kword_term {
+	const char *       value;
+	size_t             len;
+	cli_arg_parse_fn * on_match;
+};
+
+#warning Use static_assert()
+#define CLI_ARG_KWORD_TERM(_value, _on_match) \
+	{ \
+		.value    = _value, \
+		.len      = sizeof(_value) - 1, \
+		.on_match = _on_match \
+	}
+
+struct cli_arg_kword_parm {
+	struct cli_arg_parm               super;
+	unsigned int                      nr;
+	const struct cli_arg_kword_term * terms;
+};
 
 extern int
-cli_arg_parse_term(const struct cli_arg * terminal,
-                   int                    argc,
-                   const char * const     argv[]);
+cli_arg_create_kword_parm(struct cli_arg_kword_parm **      parameter,
+                          const char *                      name,
+                          const struct cli_arg_kword_term * terminals,
+                          unsigned int                      nr);
+
+extern int
+cli_arg_createn_add_kword_parm(struct cli_arg_kword_parm **      parameter,
+                               const char *                      name,
+                               const struct cli_arg_kword_term * terminals,
+                               unsigned int                      nr,
+                               struct cli_node *                 cmd_or_arg);
 
 #endif /* _CLI_ARG_H */

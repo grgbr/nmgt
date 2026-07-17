@@ -31,6 +31,9 @@
 
 #define __cli_unused __attribute__((__unused__))
 
+#define cli_array_nr(_array) \
+	(sizeof(_array) / sizeof(_array[0]))
+
 #define cli_containerof(_ptr, _type, _member) \
 	({ \
 		const typeof(((_type *)0)->_member) * __ptr = (_ptr); \

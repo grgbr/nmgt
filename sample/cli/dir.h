@@ -236,9 +236,9 @@ struct cli_dir_work {
 };
 
 extern int
-cli_dir_work_search(struct cli_dir_work *   work,
-                    struct cli_context *    context,
-                    const struct cli_dir ** directory);
+cli_dir_work_search(const struct cli_dir_work * work,
+                    struct cli_context *        context,
+                    const struct cli_dir **     directory);
 
 extern int
 cli_dir_work_parse(struct cli_dir_work *   work,
@@ -251,13 +251,21 @@ cli_dir_work_create(size_t                      size,
                     const struct cli_cmd *      command,
                     const struct cli_work_ops * opers);
 
-extern void
-cli_dir_work_destroy(struct cli_dir_work * work);
+static inline void
+cli_dir_work_destroy(struct cli_dir_work * work)
+{
+	cli_destroy_work(&work->super);
+}
 
 extern void
 cli_dir_work_release(struct cli_work * work);
 
-extern struct cli_arg *
+struct cli_dir_work_arg;
+
+extern struct cli_dir_work_arg *
 cli_dir_work_create_arg(bool mandatory);
+
+extern struct cli_dir_work_arg *
+cli_dir_work_createn_add_arg(bool mandatory, struct cli_node * cmd_or_arg);
 
 #endif /* _CLI_DIR_H */

@@ -82,20 +82,14 @@ cli_list_build_cmd(struct cli_dir * directory)
 	cli_dir_assert(directory);
 
 	struct cli_cmd * cmd;
-	struct cli_arg * arg;
 
 	/*
 	 * No need to check for returned code since cli_cmd_create() cannot fail
 	 * with the "ls" name argument.
 	 */
 	cli_assert(sizeof("ls") <= CLI_ARG_MAX);
-	cli_cmd_create(&cmd, "ls", &cli_list_cmd_ops);
-	cli_assert(cmd);
+	cli_cmd_createn_add(&cmd, "ls", &cli_list_cmd_ops, directory);
 
 	/* Cannot fail either. */
-	arg = cli_dir_work_create_arg(false);
-	cli_assert(arg);
-	cli_cmd_add_arg(cmd, arg);
-
-	cli_dir_add_cmd(directory, cmd);
+	cli_dir_work_createn_add_arg(false, (struct cli_node *)cmd);
 }
