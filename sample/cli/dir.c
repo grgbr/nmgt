@@ -661,11 +661,17 @@ cli_dir_work_parse_arg(const struct cli_arg *     argument,
 	cli_assert(argv[0]);
 	cli_assert(data);
 
-	return cli_dir_work_parse(
-		data,
-		argc,
-		argv,
-		((const struct cli_dir_work_arg *)argument)->mand);
+	struct cli_dir_work * wk = (struct cli_dir_work *)data;
+
+	/* Ignore multiple path arguments. */
+	if (!wk->orig)
+		return cli_dir_work_parse(
+			wk,
+			argc,
+			argv,
+			((const struct cli_dir_work_arg *)argument)->mand);
+	else
+		return 0;
 }
 
 static const struct cli_arg_ops cli_dir_work_arg_ops = {
