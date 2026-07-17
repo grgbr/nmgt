@@ -109,27 +109,15 @@ cli_arg_destroy_key(struct cli_arg_key * key)
 	cli_arg_destroy(&key->super);
 }
 
+extern struct cli_arg *
+cli_arg_create_choice(void);
+
+extern int
+cli_arg_create_keyopt(struct cli_arg_key ** keyopt, const char * name);
+
 extern int
 cli_arg_parse_term(const struct cli_arg * terminal,
                    int                    argc,
                    const char * const     argv[]);
-
-extern int
-cli_arg_parse_keyopt(const struct cli_arg *     keyopt,
-                     const struct cli_cmd *     command,
-                     const struct cli_dir *     directory,
-                     const struct cli_context * context,
-                     int                        argc,
-                     const char * const         argv[],
-                     void *                     data);
-
-extern int
-cli_arg_parse_choice(const struct cli_arg *     choice,
-                     const struct cli_cmd *     command,
-                     const struct cli_dir *     directory,
-                     const struct cli_context * context,
-                     int                        argc,
-                     const char * const         argv[],
-                     void *                     data);
 
 #endif /* _CLI_ARG_H */

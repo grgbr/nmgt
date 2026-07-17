@@ -8,6 +8,156 @@
  ******************************************************************************/
 
 struct cli_schema_work {
+	struct cli_work super;
+	LYS_OUTFORMAT   format;
+};
+
+static int
+cli_schema_parse_cmd(const struct cli_cmd * command,
+                     const struct cli_dir * directory,
+                     struct cli_context *   context,
+                     int                    argc,
+                     const char * const     argv[])
+{
+	cli_cmd_assert(command);
+	cli_dir_assert(directory);
+	cli_assert_context(context);
+	cli_assert(argv);
+
+	struct cli_schema_work * wk;
+	int                      ret;
+
+	/* Cannot fail. */
+	wk = cli_dir_work_create(sizeof(*wk), command, &cli_schema_work_ops);
+	wk->format = LYS_OUT_YANG_COMPILED;
+
+	ret = cli_cmd_parse_args(command, directory, context, argc, argv, wk);
+	if (ret < 0)
+		goto destroy;
+
+	cli_assert(ret == argc);
+	ret = cli_sched_work(context, &wk->super);
+	if (ret) {
+		cli_cmd_log(command, "cannot schedule work.");
+		goto destroy;
+	}
+
+	return argc;
+
+destroy:
+	cli_dir_work_destroy(wk);
+
+	return ret;
+}
+
+static const struct cli_cmd_ops cli_schema_cmd_ops = {
+	.parse = cli_schema_parse_cmd,
+};
+
+static int
+cli_schema_parse_yang(const struct cli_arg *     argument,
+                      const struct cli_cmd *     command __cli_unused,
+                      const struct cli_dir *     directory __cli_unused,
+                      const struct cli_context * context __cli_unused,
+                      int                        argc,
+                      const char * const         argv[],
+                      void *                     data)
+{
+	cli_arg_assert(argument);
+	cli_cmd_assert(command);
+	cli_dir_assert(directory);
+	cli_assert_context(context);
+	cli_assert(argc);
+	cli_assert(argv[0]);
+	cli_assert(data);
+
+	int ret;
+
+	ret = cli_arg_parse_term(argument, argc, argv);
+	if (ret == 1)
+		((struct cli_schema_work *)data)->format =
+			LYS_OUT_YANG_COMPILED;
+
+	return ret;
+}
+
+static const struct cli_arg_ops cli_schema_parse_yang_ops = {
+	.parse = cli_schema_parse_yang
+};
+
+static int
+cli_schema_parse_tree(const struct cli_arg *     argument,
+                      const struct cli_cmd *     command __cli_unused,
+                      const struct cli_dir *     directory __cli_unused,
+                      const struct cli_context * context __cli_unused,
+                      int                        argc,
+                      const char * const         argv[],
+                      void *                     data)
+{
+	cli_arg_assert(argument);
+	cli_cmd_assert(command);
+	cli_dir_assert(directory);
+	cli_assert_context(context);
+	cli_assert(argc);
+	cli_assert(argv[0]);
+	cli_assert(data);
+
+	int ret;
+
+	ret = cli_arg_parse_term(argument, argc, argv);
+	if (ret == 1)
+		((struct cli_schema_work *)data)->format =
+			LYS_OUT_TREE;
+
+	return ret;
+}
+
+static const struct cli_arg_ops cli_schema_parse_tree_ops = {
+	.parse = cli_schema_parse_tree
+};
+
+void
+cli_schema_build_cmd(struct cli_dir * directory)
+{
+	cli_dir_assert(directory);
+
+	struct cli_cmd *     cmd;
+	struct cli_arg *     choice;
+	struct cli_arg_key * kopt;
+	struct cli_arg *     path;
+	struct cli_arg_key * term;
+
+#warning REVIEW ME
+	/*
+	 * No need to check for returned code since cli_cmd_create() cannot fail
+	 * with the "ls" name argument.
+	 */
+	cli_assert(sizeof("schema") <= CLI_ARG_MAX);
+	cli_cmd_create(&cmd, "schema", &cli_schema_cmd_ops);
+	cli_assert(cmd);
+
+	choice = cli_arg_create_choice();
+	cli_cmd_add_arg(cmd, choice);
+
+	path = cli_dir_work_create_arg(false));
+	cli_arg_add_child(choice, path);
+
+	ret = cli_arg_create_keyopt(&kopt, "format");
+	cli_assert(!ret);
+	cli_arg_add_child(choice, kopt);
+
+	ret = cli_arg_create_key(&term, "yang", &cli_schema_parse_yang_ops),
+	cli_assert(!ret);
+	cli_arg_add_child(kopt, term);
+
+	ret = cli_arg_create_key(&term, "tree", &cli_schema_parse_tree_ops),
+	cli_assert(!ret);
+	cli_arg_add_child(kopt, term);
+
+	cli_dir_add_cmd(directory, cmd);
+}
+#if 0
+struct cli_schema_work {
 	struct cli_work       super;
 	struct cli_dir_search search;
 	LYS_OUTFORMAT         format;
@@ -208,3 +358,4 @@ cli_schema_build_cmd(struct cli_dir * directory)
 
 	cli_dir_add_cmd(directory, cli_cmd_create(&cli_schema_cmd_ops));
 }
+#endif

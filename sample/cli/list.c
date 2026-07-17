@@ -7,34 +7,17 @@
  * List menu directory entries.
  ******************************************************************************/
 
-struct cli_list_work {
-	struct cli_work       super;
-	struct cli_dir_search search;
-};
-
 static int
 cli_list_exec_work(struct cli_work * work, struct cli_context * context)
 {
-	const struct cli_list_work * wk = (const struct cli_list_work *)work;
-	const struct cli_dir *       dir;
-	int                          ret;
-	const struct cli_dir *       child;
+	struct cli_dir_work *  wk = (struct cli_dir_work *)work;
+	const struct cli_dir * dir;
+	int                    ret;
+	const struct cli_dir * child;
 
-	/* Search for the requested directory. */
-	ret = cli_dir_exec_search(&wk->search, &dir, context);
-	if (ret) {
-		/*
-		 * Searching for the current directory cannot fail. Hence,
-		 * `wk->search.orig' should always exist here.
-		 */
-		cli_assert(wk->search.orig);
-
-		cli_log("ls: '%s': %s.",
-		        wk->search.orig,
-		        cli_dir_strerror(-ret));
-
+	ret = cli_dir_work_search(wk, context, &dir);
+	if (ret)
 		return ret;
-	}
 
 	/*
 	 * Given the directory descriptor found above, display its children
@@ -44,74 +27,53 @@ cli_list_exec_work(struct cli_work * work, struct cli_context * context)
 		printf("%s\n", child->name);
 
 	return 0;
-}
 
-static void
-cli_list_release_work(struct cli_work *    work,
-                      struct cli_context * context __cli_unused)
-{
-	cli_dir_fini_search(&((struct cli_list_work *)work)->search);
 }
 
 static const struct cli_work_ops cli_list_work_ops = {
 	.exec    = cli_list_exec_work,
-	.release = cli_list_release_work
+	.release = cli_dir_work_release
 };
 
 static int
-cli_list_parse_cmd(const struct cli_cmd * command __cli_unused,
-                   const struct cli_dir * dir __cli_unused,
+cli_list_parse_cmd(const struct cli_cmd * command,
+                   const struct cli_dir * directory,
+                   struct cli_context *   context,
                    int                    argc,
-                   const char * const     argv[],
-                   void *                 data)
+                   const char * const     argv[])
 {
-	cli_assert(argc >= 1);
+	cli_cmd_assert(command);
+	cli_dir_assert(directory);
+	cli_assert_context(context);
+	cli_assert(argv);
 
-	if (!strcmp(argv[0], "ls")) {
-		if (argc <= 2) {
-			ssize_t                ret;
-			struct cli_list_work * wk;
+	struct cli_dir_work * wk;
+	int                   ret;
 
-			wk = (struct cli_list_work *)
-			     cli_create_work(sizeof(*wk), &cli_list_work_ops);
-			cli_assert(wk);
-			cli_dir_init_search(&wk->search);
+	/* Cannot fail. */
+	wk = cli_dir_work_create(sizeof(*wk), command, &cli_list_work_ops);
 
-			ret = cli_dir_parse_search(&wk->search,
-			                           (argc == 1) ? NULL
-			                                       : argv[1]);
-			if (ret) {
-				cli_log("ls: invalid path: %s.",
-				        cli_dir_strerror(-ret));
-				goto destroy;
-			}
+	ret = cli_cmd_parse_args(command, directory, context, argc, argv, wk);
+	if (ret < 0)
+		goto destroy;
 
-			ret = cli_sched_work(data, &wk->super);
-			if (ret) {
-				cli_log("ls: cannot schedule work.");
-				goto destroy;
-			}
+	cli_assert(ret == argc);
+	ret = cli_sched_work(context, &wk->super);
+	if (ret) {
+		cli_cmd_log(command, "cannot schedule work.");
+		goto destroy;
+	}
 
-			return argc;
+	return argc;
 
 destroy:
-			cli_destroy_work(&wk->super, data);
+	cli_dir_work_destroy(wk);
 
-			return ret;
-		}
-		else {
-			cli_log("ls: too many argument(s).");
-
-			return -EINVAL;
-		}
-	}
-	else
-		return 0;
+	return ret;
 }
 
 static const struct cli_cmd_ops cli_list_cmd_ops = {
 	.parse = cli_list_parse_cmd,
-	.fini  = cli_cmd_null_fini
 };
 
 void
@@ -119,5 +81,21 @@ cli_list_build_cmd(struct cli_dir * directory)
 {
 	cli_dir_assert(directory);
 
-	cli_dir_add_cmd(directory, cli_cmd_create(&cli_list_cmd_ops));
+	struct cli_cmd * cmd;
+	struct cli_arg * arg;
+
+	/*
+	 * No need to check for returned code since cli_cmd_create() cannot fail
+	 * with the "ls" name argument.
+	 */
+	cli_assert(sizeof("ls") <= CLI_ARG_MAX);
+	cli_cmd_create(&cmd, "ls", &cli_list_cmd_ops);
+	cli_assert(cmd);
+
+	/* Cannot fail either. */
+	arg = cli_dir_work_create_arg(false);
+	cli_assert(arg);
+	cli_cmd_add_arg(cmd, arg);
+
+	cli_dir_add_cmd(directory, cmd);
 }

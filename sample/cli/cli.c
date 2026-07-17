@@ -323,10 +323,10 @@ cli_init(struct cli_context * context)
 	if (ret)
 		return ret;
 
-	//cli_list_build_cmd(&context->root);
+	cli_list_build_cmd(&context->root);
 	cli_find_build_cmd(&context->root);
-	//cli_xpath_build_cmd(&context->root);
-	//cli_schema_build_cmd(&context->root);
+	cli_xpath_build_cmd(&context->root);
+	cli_schema_build_cmd(&context->root);
 
 	cli_lys_foreach_module(context, m, mod) {
 		struct cli_dir * dir;

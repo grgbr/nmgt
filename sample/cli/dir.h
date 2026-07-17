@@ -257,9 +257,7 @@ cli_dir_work_destroy(struct cli_dir_work * work);
 extern void
 cli_dir_work_release(struct cli_work * work);
 
-struct cli_dir_work_arg;
-
-extern struct cli_dir_search_arg *
-cli_dir_search_create_arg(bool mandatory);
+extern struct cli_arg *
+cli_dir_work_create_arg(bool mandatory);
 
 #endif /* _CLI_DIR_H */

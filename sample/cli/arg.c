@@ -83,28 +83,54 @@ cli_arg_create_key(struct cli_arg_key **      key,
 	return ret;
 }
 
-int
-cli_arg_parse_term(const struct cli_arg * terminal,
-                   int                    argc,
-                   const char * const     argv[])
+static int
+cli_arg_parse_choice(const struct cli_arg *     choice,
+                     const struct cli_cmd *     command,
+                     const struct cli_dir *     directory,
+                     const struct cli_context * context,
+                     int                        argc,
+                     const char * const         argv[],
+                     void *                     data)
 {
-	cli_arg_assert_key((const struct cli_arg_key *)terminal);
+	cli_arg_assert(choice);
+	cli_cmd_assert(command);
 	cli_assert(argc == 1);
 	cli_assert(argv[0]);
 	cli_assert(strnlen(argv[0], CLI_ARG_MAX) < CLI_ARG_MAX);
 
-	const struct cli_arg_key * term = (const struct cli_arg_key *)terminal;
-	const char *               str = argv[0];
-	size_t                     len;
+	const struct cli_node * opt;
 
-	len = strnlen(str, term->len + 1);
-	if ((len != term->len) || memcmp(str, term->name, term->len))
-		return 0;
+	cli_node_foreach_child(&choice->super, opt) {
+		int ret;
 
-	return 1;
+		ret = cli_arg_parse((const struct cli_arg *)opt,
+		                    command,
+		                    directory,
+		                    context,
+		                    1,
+		                    &argv[0],
+		                    data);
+		cli_assert(ret <= 1);
+		if (ret)
+			return ret;
+	}
+
+	cli_cmd_log(command, "'%s': invalid argument.", argv[0]);
+
+	return -EINVAL;
 }
 
-int
+static const struct cli_arg_ops cli_arg_choice_ops = {
+	.parse = cli_arg_parse_choice
+};
+
+struct cli_arg *
+cli_arg_create_choice(void)
+{
+	return cli_arg_create(sizeof(struct cli_arg *), &cli_arg_choice_ops);
+}
+
+static int
 cli_arg_parse_keyopt(const struct cli_arg *     keyopt,
                      const struct cli_cmd *     command,
                      const struct cli_dir *     directory,
@@ -160,39 +186,33 @@ cli_arg_parse_keyopt(const struct cli_arg *     keyopt,
 	return -EINVAL;
 }
 
+static const struct cli_arg_ops cli_arg_keyopt_ops = {
+	.parse = cli_arg_parse_keyopt
+};
+
 int
-cli_arg_parse_choice(const struct cli_arg *     choice,
-                     const struct cli_cmd *     command,
-                     const struct cli_dir *     directory,
-                     const struct cli_context * context,
-                     int                        argc,
-                     const char * const         argv[],
-                     void *                     data)
+cli_arg_create_keyopt(struct cli_arg_key ** keyopt, const char * name);
 {
-	cli_arg_assert(choice);
-	cli_cmd_assert(command);
+	return cli_arg_create_key(&kopt, name, &cli_arg_keyopt_ops);
+}
+
+int
+cli_arg_parse_term(const struct cli_arg * terminal,
+                   int                    argc,
+                   const char * const     argv[])
+{
+	cli_arg_assert_key((const struct cli_arg_key *)terminal);
 	cli_assert(argc == 1);
 	cli_assert(argv[0]);
 	cli_assert(strnlen(argv[0], CLI_ARG_MAX) < CLI_ARG_MAX);
 
-	const struct cli_node * opt;
+	const struct cli_arg_key * term = (const struct cli_arg_key *)terminal;
+	const char *               str = argv[0];
+	size_t                     len;
 
-	cli_node_foreach_child(&choice->super, opt) {
-		int ret;
+	len = strnlen(str, term->len + 1);
+	if ((len != term->len) || memcmp(str, term->name, term->len))
+		return 0;
 
-		ret = cli_arg_parse((const struct cli_arg *)opt,
-		                    command,
-		                    directory,
-		                    context,
-		                    1,
-		                    &argv[0],
-		                    data);
-		cli_assert(ret <= 1);
-		if (ret)
-			return ret;
-	}
-
-	cli_cmd_log(command, "'%s': invalid argument.", argv[0]);
-
-	return -EINVAL;
+	return 1;
 }

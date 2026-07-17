@@ -64,11 +64,10 @@ cli_cmd_parse_args(const struct cli_cmd * command,
 
 		return argc;
 	}
-	else {
-		cli_cmd_log(command, "too many arguments.");
 
-		return -EINVAL;
-	}
+	cli_cmd_log(command, "too many arguments.");
+
+	return -EINVAL;
 }
 
 int
@@ -83,15 +82,23 @@ cli_cmd_parse(const struct cli_cmd * command,
 	cli_assert_context(context);
 	cli_assert_args(argc, argv);
 
+	int ret = 0;
+
 	if (!strcmp(argv[0], command->name)) {
-		return command->ops->parse(command,
-		                           directory,
-		                           context,
-		                           argc - 1,
-		                           &argv[1]);
+		int ret;
+
+		ret = command->ops->parse(command,
+		                          directory,
+		                          context,
+		                          argc - 1,
+		                          &argv[1]);
+		if (ret >= 0) {
+			cli_assert((ret + 1) == argc);
+			return argc;
+		}
 	}
-	else
-		return 0;
+
+	return ret;
 }
 
 int

@@ -1,5 +1,9 @@
 CFLAGS  := -Wall -Wextra \
            -fsanitize=address \
+           -fsanitize=pointer-compare \
+           -fsanitize=pointer-subtract \
+           -fsanitize=leak \
+           -fsanitize=undefined \
            $(shell env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
                        $(PKG_CONFIG) --cflags sysrepo libyang) \
            $(EXTRA_CFLAGS)
@@ -30,7 +34,7 @@ $(BUILDDIR)/nmgmt-schema: old/schema.c | $(BUILDDIR)/
 $(BUILDDIR)/nmgmt-data: old/data.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
 #$(BUILDDIR)/nmgmt-cli: cli.c list.c find.c xpath.c schema.c yang.c dir.c cmd.c path.c arg.c node.c common.c | $(BUILDDIR)/
-$(BUILDDIR)/nmgmt-cli: cli.c yang.c arg.c cmd.c dir.c path.c node.c common.c find.c | $(BUILDDIR)/
+$(BUILDDIR)/nmgmt-cli: cli.c schema.c xpath.c list.c yang.c arg.c cmd.c dir.c path.c node.c common.c find.c | $(BUILDDIR)/
 	$(CC) -dM -o $(@) $(CFLAGS) $(^) $(LDFLAGS)
 
 $(BUILDDIR)/:

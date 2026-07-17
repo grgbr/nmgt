@@ -369,6 +369,8 @@ cli_dir_parse_cmd(const struct cli_dir * directory,
 		return -EINVAL;
 	}
 
+	cli_assert(ret < 0);
+
 	return ret;
 }
 
@@ -565,25 +567,23 @@ cli_dir_work_parse(struct cli_dir_work * work,
 		if (ret)
 			goto out;
 
-		if (*path == '/') {
-			ret = cli_path_mkabs(&work->path,
-			                     work->norm,
-			                     sizeof(work->norm));
-			cli_assert(ret >= 0);
-			if (ret && (work->norm[ret - 1] != '/')) {
-				if ((size_t)(ret + 1) >= sizeof(work->norm)) {
-					ret = -ENAMETOOLONG;
-					goto out;
-				}
-
-				work->norm[ret++] = '/';
-			}
-		}
-		else {
+		if (*path != '/')
 			ret = cli_path_mkrel(&work->path,
 			                     work->norm,
 			                     sizeof(work->norm));
-			cli_assert(ret >= 0);
+		else
+			ret = cli_path_mkabs(&work->path,
+			                     work->norm,
+			                     sizeof(work->norm));
+
+		cli_assert(ret >= 0);
+		if (ret && (work->norm[ret - 1] != '/')) {
+			if ((size_t)(ret + 1) >= sizeof(work->norm)) {
+				ret = -ENAMETOOLONG;
+				goto out;
+			}
+
+			work->norm[ret++] = '/';
 		}
 
 		work->len = (size_t)ret;
@@ -683,7 +683,7 @@ static const struct cli_arg_ops cli_dir_work_arg_ops = {
 	.parse = cli_dir_work_parse_arg
 };
 
-struct cli_dir_work_arg *
+struct cli_arg *
 cli_dir_work_create_arg(bool mandatory)
 {
 	struct cli_dir_work_arg * arg;
@@ -694,7 +694,7 @@ cli_dir_work_create_arg(bool mandatory)
 
 	arg->mand = mandatory;
 
-	return arg;
+	return &arg->super;
 }
 
 #if 0
