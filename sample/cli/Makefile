@@ -33,7 +33,7 @@ $(BUILDDIR)/nmgmt-schema: old/schema.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
 $(BUILDDIR)/nmgmt-data: old/data.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
-$(BUILDDIR)/nmgmt-cli: cli.c list.c pwd.c find.c xpath.c schema.c yang.c dir.c cmd.c path.c arg.c node.c common.c | $(BUILDDIR)/
+$(BUILDDIR)/nmgmt-cli: cli.c list.c cd.c pwd.c find.c xpath.c schema.c yang.c dir.c cmd.c path.c arg.c node.c common.c | $(BUILDDIR)/
 	$(CC) -dM -o $(@) $(CFLAGS) $(^) $(LDFLAGS)
 
 $(BUILDDIR)/:

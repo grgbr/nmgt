@@ -13,15 +13,15 @@
 #define CLI_WORK_NR (128U)
 
 struct cli_context {
-	sr_conn_ctx_t *       conn;
-	sr_session_ctx_t *    sess;
-	const struct ly_ctx * lyctx;
-	unsigned int          wkcnt;
-	struct cli_work *     wkq[CLI_WORK_NR];
-	struct cli_dir        root;
-	struct cli_dir *      cwd;
-	struct ly_out *       lyout;
-	bool                  isatty;
+	sr_conn_ctx_t *        conn;
+	sr_session_ctx_t *     sess;
+	const struct ly_ctx *  lyctx;
+	unsigned int           wkcnt;
+	struct cli_work *      wkq[CLI_WORK_NR];
+	struct cli_dir         root;
+	const struct cli_dir * cwd;
+	struct ly_out *        lyout;
+	bool                   isatty;
 };
 
 #define cli_assert_context(_ctx) \
@@ -36,12 +36,21 @@ struct cli_context {
 extern unsigned int
 cli_term_cols(const struct cli_context * context);
 
-static inline struct cli_dir *
+static inline const struct cli_dir *
 cli_cwd(const struct cli_context * context)
 {
 	cli_assert_context(context);
 
 	return context->cwd;
+}
+
+static inline void
+cli_chdir(struct cli_context * context, const struct cli_dir * directory)
+{
+	cli_assert_context(context);
+	cli_dir_assert(directory);
+
+	context->cwd = directory;
 }
 
 static inline int

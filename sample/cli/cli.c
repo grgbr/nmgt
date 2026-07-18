@@ -1,5 +1,6 @@
 #include "yang.h"
 #include "list.h"
+#include "cd.h"
 #include "pwd.h"
 #include "find.h"
 #include "xpath.h"
@@ -325,6 +326,7 @@ cli_init(struct cli_context * context)
 		return ret;
 
 	cli_list_build_cmd(&context->root);
+	cli_chdir_build_cmd(&context->root);
 	cli_pwd_build_cmd(&context->root);
 	cli_find_build_cmd(&context->root);
 	cli_xpath_build_cmd(&context->root);
