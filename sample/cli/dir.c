@@ -159,6 +159,7 @@ cli_dir_mkabs(const struct cli_dir * directory, char * path, size_t size)
 	}
 
 	len = cli_path_mkabs(&pth, path, size);
+	cli_assert(len);
 
 	cli_path_fini(&pth);
 
@@ -556,50 +557,56 @@ cli_dir_work_parse(struct cli_dir_work * work,
 	cli_assert(argc >= 1);
 	cli_assert(argv[0]);
 
-	const char * path = argv[0];
-	ssize_t      ret = 0;
+	if (!work->orig) {
+		const char * path = argv[0];
+		ssize_t      ret = 0;
 
-	if (*path != '\0') {
-		ret = cli_path_parse(&work->path, path);
-		if (ret)
-			goto out;
 
-		if (*path != '/')
-			ret = cli_path_mkrel(&work->path,
-			                     work->norm,
-			                     sizeof(work->norm));
-		else
-			ret = cli_path_mkabs(&work->path,
-			                     work->norm,
-			                     sizeof(work->norm));
-
-		cli_assert(ret >= 0);
-		if (ret && (work->norm[ret - 1] != '/')) {
-			if ((size_t)(ret + 1) >= sizeof(work->norm)) {
-				ret = -ENAMETOOLONG;
+		if (*path != '\0') {
+			ret = cli_path_parse(&work->path, path);
+			if (ret)
 				goto out;
+
+			if (*path != '/')
+				ret = cli_path_mkrel(&work->path,
+				                     work->norm,
+				                     sizeof(work->norm));
+			else
+				ret = cli_path_mkabs(&work->path,
+				                     work->norm,
+				                     sizeof(work->norm));
+
+			cli_assert(ret >= 0);
+			if (ret && (work->norm[ret - 1] != '/')) {
+				if ((size_t)(ret + 1) >= sizeof(work->norm)) {
+					ret = -ENAMETOOLONG;
+					goto out;
+				}
+
+				work->norm[ret++] = '/';
 			}
-
-			work->norm[ret++] = '/';
 		}
-	}
 
-	work->orig = path;
-	work->len = (size_t)ret;
-	work->norm[ret] = '\0';
+		work->orig = path;
+		work->len = (size_t)ret;
+		work->norm[ret] = '\0';
 
-	return 1;
+		return 1;
 
 out:
-	if (!mandatory)
-		return 0;
+		if (!mandatory)
+			return 0;
 
-	cli_cmd_log(work->cmd,
-	            "'%s': invalid path argument: %s.",
-	            path,
-	            cli_path_strerror(-ret));
-
-	return (int)ret;
+		cli_cmd_log(work->cmd,
+		            "'%s': invalid path argument: %s.",
+		            path,
+		            cli_path_strerror(-ret));
+		return (int)ret;
+	}
+	else {
+		/* Tell the caller that parsing has already been compeleted. */
+		return -EALREADY;
+	}
 }
 
 struct cli_dir_work *
@@ -661,17 +668,16 @@ cli_dir_work_parse_arg(const struct cli_arg *     argument,
 	cli_assert(argv[0]);
 	cli_assert(data);
 
-	struct cli_dir_work * wk = (struct cli_dir_work *)data;
+	int ret;
 
-	/* Ignore multiple path arguments. */
-	if (!wk->orig)
-		return cli_dir_work_parse(
-			wk,
-			argc,
-			argv,
-			((const struct cli_dir_work_arg *)argument)->mand);
-	else
-		return 0;
+	ret = cli_dir_work_parse(
+		(struct cli_dir_work *)data,
+		argc,
+		argv,
+		((const struct cli_dir_work_arg *)argument)->mand);
+
+	/* Ignore multiple path argument. */
+	return (ret != -EALREADY) ? ret : 0;
 }
 
 static const struct cli_arg_ops cli_dir_work_arg_ops = {

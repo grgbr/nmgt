@@ -514,6 +514,28 @@ cli_path_fini(struct cli_path * path)
 	cli_free(path->comps);
 }
 
+struct cli_path *
+cli_path_create(void)
+{
+	struct cli_path * path;
+
+	path = cli_malloc(sizeof(*path));
+	cli_assert(path);
+
+	cli_path_init(path);
+
+	return path;
+}
+
+void
+cli_path_destroy(struct cli_path * path)
+{
+	cli_path_assert(path);
+
+	cli_path_fini(path);
+	cli_free(path);
+}
+
 ssize_t
 cli_path_normalize(const char * path, char * norm, size_t size)
 {

@@ -138,6 +138,12 @@ cli_path_init(struct cli_path * path);
 extern void
 cli_path_fini(struct cli_path * path);
 
+extern struct cli_path *
+cli_path_create(void);
+
+extern void
+cli_path_destroy(struct cli_path * path);
+
 extern ssize_t
 cli_path_normalize(const char * path, char * norm, size_t size);
 
