@@ -49,9 +49,16 @@ cli_chdir_parse_cmd(const struct cli_cmd * command,
 		int                   ret;
 
 		/* Cannot fail. */
-		wk = cli_dir_work_create(sizeof(*wk), command, &cli_chdir_work_ops);
+		wk = cli_dir_work_create(sizeof(*wk),
+		                         command,
+		                         &cli_chdir_work_ops);
 
-		ret = cli_cmd_parse_args(command, directory, context, argc, argv, wk);
+		ret = cli_cmd_parse_args(command,
+		                         directory,
+		                         context,
+		                         argc,
+		                         argv,
+		                         wk);
 		if (ret < 0)
 			goto destroy;
 
@@ -88,7 +95,7 @@ cli_chdir_build_cmd(struct cli_dir * directory)
 
 	/*
 	 * No need to check for returned code since cli_cmd_create() cannot fail
-	 * with the "ls" name argument.
+	 * with the "cd" name argument.
 	 */
 	cli_assert(sizeof("cd") <= CLI_ARG_MAX);
 	cli_cmd_createn_add(&cmd, "cd", &cli_chdir_cmd_ops, directory);

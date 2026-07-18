@@ -84,7 +84,7 @@ cli_pwd_build_cmd(struct cli_dir * directory)
 
 	/*
 	 * No need to check for returned code since cli_cmd_create() cannot fail
-	 * with the "ls" name argument.
+	 * with the "pwd" name argument.
 	 */
 	cli_assert(sizeof("pwd") <= CLI_ARG_MAX);
 	cli_cmd_createn_add(&cmd, "pwd", &cli_pwd_cmd_ops, directory);
