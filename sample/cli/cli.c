@@ -297,6 +297,7 @@ cli_build_tree_dir(struct cli_context * context,
 		break;
 
 	default:
+#if defined(CONFIG_CLI_DEBUG)
 		if (event == CLI_WALK_PRE_EVT) {
 			char * xpath;
 
@@ -306,6 +307,7 @@ cli_build_tree_dir(struct cli_context * context,
 			        cli_ly_nodetype_str(node->nodetype));
 			cli_free(xpath);
 		}
+#endif /* defined(CONFIG_CLI_DEBUG) */
 	}
 
 	return CLI_WALK_CONT_RET;
