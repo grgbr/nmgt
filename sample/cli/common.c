@@ -1,4 +1,5 @@
 #include "common.h"
+#include <stdarg.h>
 
 #if defined(CONFIG_CLI_ASSERT)
 
@@ -79,4 +80,26 @@ cli_strdup(const char * string)
 		abort();
 
 	return str;
+}
+
+int
+cli_asprintf(char ** string, const char * format, ...)
+{
+	va_list args;
+	char *  str;
+	int     ret;
+
+	va_start(args, format);
+	ret = vasprintf(&str, format, args);
+	va_end(args);
+
+	if (ret >= 0) {
+		*string = str;
+		return ret;
+	}
+
+	if (errno == ENOMEM)
+		abort();
+
+	return -errno;
 }

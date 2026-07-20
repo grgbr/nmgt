@@ -5,6 +5,7 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <errno.h>
 
 #define CONFIG_CLI_ASSERT 1
@@ -17,6 +18,9 @@
  * byte.
  */
 #define CLI_LINE_MAX (1024)
+#if CLI_LINE_MAX > SSIZE_MAX
+#error Invalid maximum input line size !
+#endif /* CLI_LINE_MAX > SSIZE_MAX */
 
 /*
  * Maximum size available to store a xpath including the terminating NULL byte.
@@ -30,6 +34,9 @@
 #include <stdio.h>
 
 #define __cli_unused __attribute__((__unused__))
+
+#define __cli_printf(_fmt_indx, _arg_indx) \
+	__attribute__((format(printf, _fmt_indx, _arg_indx)))
 
 #define cli_array_nr(_array) \
 	(sizeof(_array) / sizeof(_array[0]))
@@ -79,6 +86,9 @@ cli_realloc(void * data, size_t size);
 
 extern char *
 cli_strdup(const char * string);
+
+extern int
+cli_asprintf(char ** string, const char * format, ...) __cli_printf(2, 3);
 
 static inline void
 cli_free(void * data)

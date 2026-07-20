@@ -1,3 +1,4 @@
+#include "cli.h"
 #include "yang.h"
 #include "list.h"
 #include "cd.h"
@@ -314,7 +315,7 @@ cli_build_tree_dir(struct cli_context * context,
 }
 
 static int
-cli_init(struct cli_context * context)
+cli_init(struct cli_context * context, bool history)
 {
 	cli_assert(context);
 
@@ -361,6 +362,10 @@ cli_init(struct cli_context * context)
 			goto fini;
 	}
 
+	ret = cli_shell_init(&context->shell, history);
+	if (ret)
+		goto fini;
+
 	return 0;
 
 fini:
@@ -372,6 +377,7 @@ fini:
 static void
 cli_fini(struct cli_context * context)
 {
+	cli_shell_fini(&context->shell);
 	cli_fini_context(context);
 }
 
@@ -386,7 +392,7 @@ main(int argc, const char * const argv[])
 		return EXIT_FAILURE;
 	}
 
-	ret = cli_init(&ctx);
+	ret = cli_init(&ctx, true);
 	if (ret)
 		goto out;
 

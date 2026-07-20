@@ -1,6 +1,7 @@
 #ifndef _CLI_H
 #define _CLI_H
 
+#include "shell.h"
 #include "dir.h"
 #include "work.h"
 #include <stdbool.h>
@@ -22,6 +23,7 @@ struct cli_context {
 	const struct cli_dir * cwd;
 	struct ly_out *        lyout;
 	bool                   isatty;
+	struct cli_shell       shell;
 };
 
 #define cli_assert_context(_ctx) \

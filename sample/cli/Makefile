@@ -5,10 +5,10 @@ CFLAGS  := -Wall -Wextra \
            -fsanitize=leak \
            -fsanitize=undefined \
            $(shell env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
-                       $(PKG_CONFIG) --cflags sysrepo libyang) \
+                       $(PKG_CONFIG) --cflags sysrepo libyang readline) \
            $(EXTRA_CFLAGS)
 LDFLAGS := $(shell env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
-                       $(PKG_CONFIG) --libs sysrepo libyang) \
+                       $(PKG_CONFIG) --libs sysrepo libyang readline) \
            $(EXTRA_LDFLAGS)
 
 .PHONY: all
@@ -33,7 +33,7 @@ $(BUILDDIR)/nmgmt-schema: old/schema.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
 $(BUILDDIR)/nmgmt-data: old/data.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
-$(BUILDDIR)/nmgmt-cli: cli.c list.c cd.c pwd.c find.c xpath.c schema.c yang.c dir.c cmd.c path.c arg.c node.c common.c | $(BUILDDIR)/
+$(BUILDDIR)/nmgmt-cli: cli.c shell.c list.c cd.c pwd.c find.c xpath.c schema.c yang.c dir.c cmd.c path.c arg.c node.c common.c | $(BUILDDIR)/
 	$(CC) -dM -o $(@) $(CFLAGS) $(^) $(LDFLAGS)
 
 $(BUILDDIR)/:
