@@ -23,6 +23,7 @@ struct cli_context {
 	const struct cli_dir * cwd;
 	struct ly_out *        lyout;
 	bool                   isatty;
+	bool                   interact;
 	struct cli_shell       shell;
 };
 
@@ -46,14 +47,8 @@ cli_cwd(const struct cli_context * context)
 	return context->cwd;
 }
 
-static inline void
-cli_chdir(struct cli_context * context, const struct cli_dir * directory)
-{
-	cli_assert_context(context);
-	cli_dir_assert(directory);
-
-	context->cwd = directory;
-}
+extern void
+cli_chdir(struct cli_context * context, const struct cli_dir * directory);
 
 static inline int
 cli_sched_work(struct cli_context * context, struct cli_work * work)

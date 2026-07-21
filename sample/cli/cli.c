@@ -6,6 +6,7 @@
 #include "find.h"
 #include "xpath.h"
 #include "schema.h"
+#include "quit.h"
 #include <sys/ioctl.h>
 
 /******************************************************************************
@@ -66,13 +67,58 @@ cli_exec_workq(struct cli_context * context)
  * Overall cli context handling
  ******************************************************************************/
 
+static bool
+cli_shell_ison(const struct cli_context * context)
+{
+	return context->interact;
+}
+
+void
+cli_chdir(struct cli_context * context, const struct cli_dir * directory)
+{
+	cli_assert_context(context);
+	cli_dir_assert(directory);
+
+	if (cli_shell_ison(context)) {
+		char *  path;
+		ssize_t len;
+
+		path = cli_malloc(CLI_PATH_MAX);
+		cli_assert(path);
+		len = cli_dir_mkabs(directory, path,  CLI_PATH_MAX);
+		cli_assert(len > 0);
+
+		cli_shell_set_prompt(&context->shell, path);
+
+		cli_free(path);
+	}
+
+	context->cwd = directory;
+}
+
 static int
 cli_parse(struct cli_context * context, int argc, const char * const argv[])
 {
 	cli_assert_context(context);
 	cli_assert_args(argc, argv);
 
-	return cli_dir_parse_cmd(context->cwd, context, argc, argv);
+	int ret;
+
+	ret = cli_dir_parse_cmd(context->cwd, context, argc, argv);
+	if (!ret && (context->cwd != &context->root))
+		ret = cli_dir_parse_cmd(&context->root, context, argc, argv);
+
+	if (ret == argc)
+		return 0;
+
+	if (!ret) {
+		cli_log("'%s': no such command.", argv[0]);
+		return -EINVAL;
+	}
+
+	cli_assert(ret < 0);
+
+	return ret;
 }
 
 #if defined(CONFIG_CLI_LOG)
@@ -209,6 +255,7 @@ cli_init_context(struct cli_context * context)
 	cli_dir_init_root(&context->root);
 	context->cwd = &context->root;
 	context->isatty = !!isatty(STDOUT_FILENO);
+	context->interact = false;
 
 	return SR_ERR_OK;
 
@@ -315,7 +362,7 @@ cli_build_tree_dir(struct cli_context * context,
 }
 
 static int
-cli_init(struct cli_context * context, bool history)
+cli_init(struct cli_context * context)
 {
 	cli_assert(context);
 
@@ -334,6 +381,7 @@ cli_init(struct cli_context * context, bool history)
 	cli_find_build_cmd(&context->root);
 	cli_xpath_build_cmd(&context->root);
 	cli_schema_build_cmd(&context->root);
+	cli_quit_build_cmd(&context->root);
 
 	cli_lys_foreach_module(context, m, mod) {
 		struct cli_dir * dir;
@@ -362,10 +410,6 @@ cli_init(struct cli_context * context, bool history)
 			goto fini;
 	}
 
-	ret = cli_shell_init(&context->shell, history);
-	if (ret)
-		goto fini;
-
 	return 0;
 
 fini:
@@ -377,30 +421,73 @@ fini:
 static void
 cli_fini(struct cli_context * context)
 {
-	cli_shell_fini(&context->shell);
 	cli_fini_context(context);
 }
 
 int
 main(int argc, const char * const argv[])
 {
+	cli_assert(argc == 1);
+	cli_assert(argv);
+
 	struct cli_context ctx;
 	int                ret;
 
-	if (argc < 2) {
-		cli_log("invalid arguments.");
-		return EXIT_FAILURE;
-	}
-
-	ret = cli_init(&ctx, true);
+	ret = cli_init(&ctx);
 	if (ret)
 		goto out;
 
-	ret = cli_parse(&ctx, argc - 1, &argv[1]);
-	if (ret)
-		goto fini;
+	if (argc == 1) {
+		if (!ctx.isatty)
+			/* Cannot run in interactive mode... */
+			goto fini;
 
-	ret = cli_exec_workq(&ctx);
+		ret = cli_shell_init(&ctx.shell, true);
+		if (ret)
+			goto fini_shell;
+
+		ctx.interact = true;
+
+		do {
+			struct cli_shell_expr expr;
+
+			ret = cli_shell_read_expr(&ctx.shell, &expr);
+			if (ret == -ESHUTDOWN) {
+				/* Shell shutdown requested. */
+				ret = 0;
+				break;
+			}
+			else if (ret == -ENODATA) {
+				/* Empty input. */
+				continue;
+			}
+			else if (ret) {
+				/* Input line fetching error. */
+				break;
+			}
+
+			ret = cli_parse(&ctx,
+			                expr.nr,
+			                (const char * const *)expr.words);
+			if (!ret)
+				ret = cli_exec_workq(&ctx);
+
+			cli_shell_release_expr(&expr);
+		} while (ret != -ESHUTDOWN);
+
+		if (ret == -ESHUTDOWN)
+			ret = 0;
+
+fini_shell:
+		cli_shell_fini(&ctx.shell);
+	}
+	else {
+		ret = cli_parse(&ctx, argc - 1, &argv[1]);
+		if (ret)
+			goto fini;
+
+		ret = cli_exec_workq(&ctx);
+	}
 
 fini:
 	cli_fini(&ctx);

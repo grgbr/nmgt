@@ -362,16 +362,6 @@ cli_dir_parse_cmd(const struct cli_dir * directory,
 			break;
 	}
 
-	if (ret == argc)
-		return 0;
-
-	if (!ret) {
-		cli_log("'%s': no such command.", argv[0]);
-		return -EINVAL;
-	}
-
-	cli_assert(ret < 0);
-
 	return ret;
 }
 
@@ -540,6 +530,13 @@ cli_dir_work_search(const struct cli_dir_work * work,
 			return ret;
 		}
 	}
+	else if (work->orig) {
+		/* Search for the root directory... */
+		cli_assert(work->orig[0] == '/');
+
+		dir = &context->root;
+	}
+	/* Else: search for the current working directory. */
 
 	*directory = dir;
 

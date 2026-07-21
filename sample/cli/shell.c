@@ -1,7 +1,7 @@
 #include "shell.h"
 #include <readline/readline.h>
 #include <readline/history.h>
-#include <netdb.h>
+#include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -59,16 +59,15 @@ cli_shell_break_expr(char *** words, char * line)
 
 	char **      toks;
 	unsigned int nr;
-	unsigned int pos;
-	unsigned int cnt;
+	unsigned int pos = 0;
+	unsigned int cnt = 0;
+	bool         done = false;
 	int          ret;
 
 	nr = 8;
-	toks = cli_malloc(nr * sizeof(toks[0]));
+	toks = cli_malloc((nr + 1) * sizeof(toks[0]));
 	cli_assert(toks);
 
-	pos = 0;
-	cnt = 0;
 	do {
 		size_t wlen;
 
@@ -80,7 +79,10 @@ cli_shell_break_expr(char *** words, char * line)
 		wlen = strcspn(&line[pos], " \t\n\r\f\v");
 		cli_assert(wlen);
 
-		line[pos + wlen] = '\0';
+		if (line[pos + wlen] == '\0')
+			done = true;
+		else
+			line[pos + wlen] = '\0';
 
 		cli_assert(cnt <= nr);
 		if (cnt == nr) {
@@ -92,13 +94,14 @@ cli_shell_break_expr(char *** words, char * line)
 		toks[cnt++] = &line[pos];
 
 		pos += wlen + 1;
-	} while (line[pos] != '\0');
+	} while (!done);
 
 	if (!cnt) {
 		ret = 0;
 		goto free;
 	}
 
+	toks[cnt] = NULL;
 	*words = toks;
 
 	return cnt;
@@ -175,21 +178,43 @@ free:
 }
 
 void
-cli_shell_set_prompt(struct cli_shell * shell, const char * prompt)
+cli_shell_release_expr(const struct cli_shell_expr * expr)
 {
-	cli_shell_assert(shell);
+	cli_assert(expr);
+	cli_assert(expr->nr);
+	cli_assert(expr->words);
+	cli_assert(expr->ln);
+
+	cli_free(expr->words);
+	cli_free(expr->ln);
+}
+
+static void
+_cli_shell_set_prompt(struct cli_shell * shell, const char * prompt)
+{
+	cli_assert(shell);
+	cli_assert(shell->pref);
 	cli_assert(prompt);
 	cli_assert(*prompt);
 
 	int ret;
-
-	cli_free(shell->prompt);
 
 	ret = cli_asprintf(&shell->prompt,
 	                   "%s%s> ",
 	                   shell->pref,
 	                   prompt);
 	cli_assert(ret >= 4);
+}
+
+void
+cli_shell_set_prompt(struct cli_shell * shell, const char * prompt)
+{
+	cli_shell_assert(shell);
+	cli_assert(prompt);
+	cli_assert(*prompt);
+
+	cli_free(shell->prompt);
+	_cli_shell_set_prompt(shell, prompt);
 }
 
 static char *
@@ -260,15 +285,17 @@ cli_shell_init(struct cli_shell * shell, bool history)
 		return -EINVAL;
 	}
 
-	host = cli_malloc(NI_MAXHOST);
+	host = cli_malloc(HOST_NAME_MAX + 1);
 	cli_assert(host);
+	ret = gethostname(host, HOST_NAME_MAX + 1);
+	cli_assert(!ret);
 
-	ret = cli_asprintf(&shell->pref, "%s@%s: ", user, host);
-	cli_assert(ret >= 5);
+	ret = cli_asprintf(&shell->pref, "%s@%s:", user, host);
+	cli_assert(ret >= 4);
 
 	cli_free(host);
 
-	cli_shell_set_prompt(shell, "/");
+	_cli_shell_set_prompt(shell, "/");
 	shell->hpath = NULL;
 	shell->shutdown = 0;
 

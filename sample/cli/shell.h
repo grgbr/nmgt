@@ -38,6 +38,9 @@ extern int
 cli_shell_read_expr(const struct cli_shell * shell,
                     struct cli_shell_expr *  expr);
 
+extern void
+cli_shell_release_expr(const struct cli_shell_expr * expr);
+
 extern int
 cli_shell_init(struct cli_shell * shell, bool history);
 
