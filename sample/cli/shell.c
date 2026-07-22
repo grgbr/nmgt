@@ -51,104 +51,36 @@ free:
 	return ret;
 }
 
-static int
-cli_shell_break_expr(char *** words, char * line)
-{
-	cli_assert(words);
-	cli_assert(line);
-
-	char **      toks;
-	unsigned int nr;
-	unsigned int pos = 0;
-	unsigned int cnt = 0;
-	bool         done = false;
-	int          ret;
-
-	nr = 8;
-	toks = cli_malloc((nr + 1) * sizeof(toks[0]));
-	cli_assert(toks);
-
-	do {
-		size_t wlen;
-
-		pos += strspn(&line[pos], " \t\n\r\f\v");
-		if (line[pos] == '\0')
-			/* End of input line. */
-			break;
-
-		wlen = strcspn(&line[pos], " \t\n\r\f\v");
-		cli_assert(wlen);
-
-		if (line[pos + wlen] == '\0')
-			done = true;
-		else
-			line[pos + wlen] = '\0';
-
-		cli_assert(cnt <= nr);
-		if (cnt == nr) {
-			nr *= 2;
-			toks = cli_realloc(toks, (nr * sizeof(toks[0])));
-			cli_assert(toks);
-		}
-
-		toks[cnt++] = &line[pos];
-
-		pos += wlen + 1;
-	} while (!done);
-
-	if (!cnt) {
-		ret = 0;
-		goto free;
-	}
-
-	toks[cnt] = NULL;
-	*words = toks;
-
-	return cnt;
-
-free:
-	cli_free(toks);
-
-	return ret;
-}
-
 static void
-cli_shell_hist_expr(const struct cli_shell_expr * expr)
+cli_shell_hist_expr(const struct cli_expr_blk * block)
 {
-	cli_assert(expr);
-	cli_assert(expr->nr);
-	cli_assert(expr->words);
-	cli_assert(expr->ln);
+	cli_expr_blk_assert(block);
 
-	unsigned int   w;
-	char         * ln;
-	char         * ptr;
+	char *            ln;
+	struct cli_expr * expr;
+	ssize_t           len;
 
 	ln = cli_malloc(CLI_LINE_MAX);
 	cli_assert(ln);
 
-	ptr = stpcpy(ln, expr->words[0]);
-	cli_assert((size_t)(ptr - ln) < CLI_LINE_MAX);
-
-	for (w = 1; w < expr->nr; w++) {
-		*ptr++ = ' ';
-		cli_assert((size_t)(ptr - ln) < CLI_LINE_MAX);
-
-		ptr = stpcpy(ptr, expr->words[w]);
-		cli_assert((size_t)(ptr - ln) < CLI_LINE_MAX);
+	len = cli_expr_blk_make_string(block, ln, CLI_LINE_MAX);
+	if (len < 0) {
+		cli_log("cannot log into history: expression too long.");
+		goto free;
 	}
 
 	add_history(ln);
 
+free:
 	cli_free(ln);
 }
 
 int
 cli_shell_read_expr(const struct cli_shell * shell,
-                    struct cli_shell_expr *  expr)
+                    struct cli_expr_blk *    block)
 {
 	cli_shell_assert(shell);
-	cli_assert(expr);
+	cli_expr_blk_assert(expr);
 
 	char * ln;
 	int    ret;
@@ -157,17 +89,12 @@ cli_shell_read_expr(const struct cli_shell * shell,
 	if (ret < 0)
 		return ret;
 
-	ret = cli_shell_break_expr(&expr->words, ln);
-	if (ret <= 0) {
-		ret = !ret ? -ENODATA : ret;
+	ret = cli_expr_blk_parse_line(block, ln);
+	if (ret < 0)
 		goto free;
-	}
-
-	expr->nr = ret;
-	expr->ln = ln;
 
 	if (shell->hpath)
-		cli_shell_hist_expr(expr);
+		cli_shell_hist_expr(block);
 
 	return 0;
 
@@ -175,18 +102,6 @@ free:
 	cli_free(ln);
 
 	return ret;
-}
-
-void
-cli_shell_release_expr(const struct cli_shell_expr * expr)
-{
-	cli_assert(expr);
-	cli_assert(expr->nr);
-	cli_assert(expr->words);
-	cli_assert(expr->ln);
-
-	cli_free(expr->words);
-	cli_free(expr->ln);
 }
 
 static void

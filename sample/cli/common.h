@@ -17,8 +17,9 @@
  * Maximum size available to store a command line including the terminating NULL
  * byte.
  */
-#define CLI_LINE_MAX (1024)
-#if CLI_LINE_MAX > SSIZE_MAX
+#define _CLI_LINE_MAX 1024
+#define CLI_LINE_MAX (_CLI_LINE_MAX ## U)
+#if _CLI_LINE_MAX > SSIZE_MAX
 #error Invalid maximum input line size !
 #endif /* CLI_LINE_MAX > SSIZE_MAX */
 
@@ -95,5 +96,10 @@ cli_free(void * data)
 {
 	free(data);
 }
+
+#define CLI_RENDER_MAX (16U)
+
+extern const char *
+cli_render_string(const char * input, char output[CLI_RENDER_MAX]);
 
 #endif /* _CLI_COMMON_H */

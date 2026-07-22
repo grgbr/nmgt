@@ -28,18 +28,11 @@ cli_shell_shutdown(struct cli_shell * shell)
 extern void
 cli_shell_set_prompt(struct cli_shell * shell, const char * prompt);
 
-struct cli_shell_expr {
-	unsigned int  nr;
-	char **       words;
-	char *        ln;
-};
+struct cli_expr_blk;
 
 extern int
 cli_shell_read_expr(const struct cli_shell * shell,
-                    struct cli_shell_expr *  expr);
-
-extern void
-cli_shell_release_expr(const struct cli_shell_expr * expr);
+                    struct cli_expr_blk *    block);
 
 extern int
 cli_shell_init(struct cli_shell * shell, bool history);

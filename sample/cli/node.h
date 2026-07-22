@@ -20,7 +20,7 @@ struct cli_node {
 #define cli_node_foreach_sibling_safe(_head, _sib, _tmp) \
 	for (_sib = _head; \
 	     (_sib) && (_tmp = (_sib)->next, 1); \
-	     _sib = _tmp)
+	     _sib = (_tmp))
 
 #define cli_node_foreach_child(_node, _child) \
 	cli_node_foreach_sibling((_node)->child, _child)

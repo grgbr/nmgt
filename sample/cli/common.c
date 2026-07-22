@@ -103,3 +103,30 @@ cli_asprintf(char ** string, const char * format, ...)
 
 	return -errno;
 }
+
+const char *
+cli_render_string(const char * input, char output[CLI_RENDER_MAX])
+{
+	cli_assert(output);
+	cli_assert(input);
+
+	const char * in = input;
+	char *       out = output;
+
+	while ((*in != '\0') && (out < &output[CLI_RENDER_MAX - 1])) {
+		if (isprint(*in))
+			*out = *in;
+		else
+			*out = '.';
+
+		in++;
+		out++;
+	}
+
+	if (*in == '\0')
+		*out = '\0';
+	else
+		memcpy(out - 3, "...", sizeof("..."));
+
+	return output;
+}

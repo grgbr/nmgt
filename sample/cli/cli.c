@@ -449,9 +449,12 @@ main(int argc, const char * const argv[])
 		ctx.interact = true;
 
 		do {
-			struct cli_shell_expr expr;
+			struct cli_expr_blk eblk = CLI_EXPR_BLK_INIT(eblk);
 
-			ret = cli_shell_read_expr(&ctx.shell, &expr);
+			ret = cli_shell_read_expr(&ctx.shell, &eblk);
+
+			FINISH ME!!!!
+
 			if (ret == -ESHUTDOWN) {
 				/* Shell shutdown requested. */
 				ret = 0;
