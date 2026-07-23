@@ -1,17 +1,11 @@
 #include "common.h"
+#include "arg.h"
 #include <stdarg.h>
 
 #if defined(CONFIG_CLI_ASSERT)
 
 #include "arg.h"
 #include <stdbool.h>
-#include <ctype.h>
-
-static bool
-cli_ischr_valid(int chr)
-{
-	return isalnum(chr) || ispunct(chr) || isblank(chr) || (chr == '\n');
-}
 
 void
 cli_assert_args(int argc, const char * const argv[])
@@ -26,18 +20,14 @@ cli_assert_args(int argc, const char * const argv[])
 		cli_assert(argv[a]);
 
 		size_t       alen = strnlen(argv[a], CLI_ARG_MAX);
-		unsigned int c;
 
 		cli_assert(alen < CLI_ARG_MAX);
 
 		len += alen;
 		cli_assert(len < CLI_LINE_MAX);
 
-		for (c = 0; c < alen; c++)
-			cli_assert(cli_ischr_valid(argv[a][c]));
+		cli_assert(!_cli_arg_isstr_valid(argv[a], alen));
 	}
-
-	cli_assert(argv[argc] == NULL);
 }
 
 #endif /* !defined(CONFIG_CLI_ASSERT) */
@@ -117,7 +107,7 @@ cli_render_string(const char * input, char output[CLI_RENDER_MAX])
 		if (isprint(*in))
 			*out = *in;
 		else
-			*out = '.';
+			*out = '?';
 
 		in++;
 		out++;

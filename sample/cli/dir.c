@@ -545,18 +545,15 @@ cli_dir_work_search(const struct cli_dir_work * work,
 
 int
 cli_dir_work_parse(struct cli_dir_work * work,
-                   int                   argc,
-                   const char * const    argv[],
+                   const char *          path,
                    bool                  mandatory)
 {
 	cli_assert(work);
 	cli_assert(work->cmd);
-	cli_assert(argc >= 1);
-	cli_assert(argv[0]);
+	cli_assert(path);
 
 	if (!work->orig) {
-		const char * path = argv[0];
-		ssize_t      ret = 0;
+		ssize_t ret = 0;
 
 
 		if (*path != '\0') {
@@ -669,8 +666,7 @@ cli_dir_work_parse_arg(const struct cli_arg *     argument,
 
 	ret = cli_dir_work_parse(
 		(struct cli_dir_work *)data,
-		argc,
-		argv,
+		argv[0],
 		((const struct cli_dir_work_arg *)argument)->mand);
 
 	/* Ignore multiple path argument. */

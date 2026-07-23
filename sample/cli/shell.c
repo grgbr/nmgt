@@ -1,4 +1,5 @@
 #include "shell.h"
+#include "expr.h"
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <unistd.h>
@@ -41,6 +42,9 @@ cli_shell_read_line(const struct cli_shell * shell, char ** line)
 		goto free;
 	}
 
+	if (shell->hpath)
+		add_history(ln);
+
 	*line = ln;
 
 	return 0;
@@ -51,14 +55,15 @@ free:
 	return ret;
 }
 
+#if 0
+/* Keep this just in case we need to save parsed line into history. */
 static void
 cli_shell_hist_expr(const struct cli_expr_blk * block)
 {
 	cli_expr_blk_assert(block);
 
-	char *            ln;
-	struct cli_expr * expr;
-	ssize_t           len;
+	char *  ln;
+	ssize_t len;
 
 	ln = cli_malloc(CLI_LINE_MAX);
 	cli_assert(ln);
@@ -74,13 +79,14 @@ cli_shell_hist_expr(const struct cli_expr_blk * block)
 free:
 	cli_free(ln);
 }
+#endif
 
 int
 cli_shell_read_expr(const struct cli_shell * shell,
-                    struct cli_expr_blk *    block)
+                    struct cli_expr_blk *    expr_block)
 {
 	cli_shell_assert(shell);
-	cli_expr_blk_assert(expr);
+	cli_expr_blk_assert(expr_block);
 
 	char * ln;
 	int    ret;
@@ -89,12 +95,9 @@ cli_shell_read_expr(const struct cli_shell * shell,
 	if (ret < 0)
 		return ret;
 
-	ret = cli_expr_blk_parse_line(block, ln);
+	ret = cli_expr_blk_parse_line(expr_block, ln);
 	if (ret < 0)
 		goto free;
-
-	if (shell->hpath)
-		cli_shell_hist_expr(block);
 
 	return 0;
 

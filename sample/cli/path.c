@@ -1,6 +1,5 @@
 #include "path.h"
 #include <stdbool.h>
-#include <ctype.h>
 #include <string.h>
 
 #define CLI_PATH_INIT_NR (CLI_PATH_MAX / CLI_PATH_NAME_MAX)

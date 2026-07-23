@@ -1,4 +1,5 @@
 #include "cli.h"
+#include "expr.h"
 #include "yang.h"
 #include "list.h"
 #include "cd.h"
@@ -119,6 +120,28 @@ cli_parse(struct cli_context * context, int argc, const char * const argv[])
 	cli_assert(ret < 0);
 
 	return ret;
+}
+
+static int
+cli_parse_expr_blk(struct cli_context *        context,
+                   const struct cli_expr_blk * expr_block)
+{
+	cli_assert_context(context);
+	cli_assert(expr_block);
+
+	const struct cli_expr * expr;
+
+	cli_expr_blk_foreach(expr_block, expr) {
+		int ret;
+
+		ret = cli_parse(context,
+		                cli_expr_arg_cnt(expr),
+		                cli_expr_args(expr));
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 #if defined(CONFIG_CLI_LOG)
@@ -452,32 +475,35 @@ main(int argc, const char * const argv[])
 			struct cli_expr_blk eblk = CLI_EXPR_BLK_INIT(eblk);
 
 			ret = cli_shell_read_expr(&ctx.shell, &eblk);
+			cli_assert(ret <= 0);
+			switch (ret) {
+			case 0:
+				/* General expression syntax ok. */
+				ret = cli_parse_expr_blk(&ctx, &eblk);
+				if (!ret)
+					ret = cli_exec_workq(&ctx);
+				break;
 
-			FINISH ME!!!!
-
-			if (ret == -ESHUTDOWN) {
+			case -ESHUTDOWN:
 				/* Shell shutdown requested. */
-				ret = 0;
 				break;
-			}
-			else if (ret == -ENODATA) {
+
+			case -ENODATA:
 				/* Empty input. */
-				continue;
-			}
-			else if (ret) {
-				/* Input line fetching error. */
+			case -EINVAL:
+				/* Invalid expression argument character. */
+			case -ENAMETOOLONG:
+				/* Expression argument too long. */
+			case -ENOBUFS:
+				/* Too many expressions within block. */
+			default:
+				/* Other input line fetching / parsing error. */
 				break;
 			}
 
-			ret = cli_parse(&ctx,
-			                expr.nr,
-			                (const char * const *)expr.words);
-			if (!ret)
-				ret = cli_exec_workq(&ctx);
-
-			cli_shell_release_expr(&expr);
+			/* Release expression block resources. */
+			cli_expr_blk_fini(&eblk);
 		} while (ret != -ESHUTDOWN);
-
 		if (ret == -ESHUTDOWN)
 			ret = 0;
 

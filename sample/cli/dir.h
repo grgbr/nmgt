@@ -242,8 +242,7 @@ cli_dir_work_search(const struct cli_dir_work * work,
 
 extern int
 cli_dir_work_parse(struct cli_dir_work *   work,
-                   int                     argc,
-                   const char * const      argv[],
+                   const char *            path,
                    bool                    mandatory);
 
 extern struct cli_dir_work *

@@ -3,9 +3,11 @@
 
 #define _GNU_SOURCE
 
+#include <stdio.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <ctype.h>
 #include <errno.h>
 
 #define CONFIG_CLI_ASSERT 1
@@ -17,22 +19,28 @@
  * Maximum size available to store a command line including the terminating NULL
  * byte.
  */
-#define _CLI_LINE_MAX 1024
-#define CLI_LINE_MAX (_CLI_LINE_MAX ## U)
-#if _CLI_LINE_MAX > SSIZE_MAX
+#define CONFIG_CLI_LINE_MAX 1024
+#if CONFIG_CLI_LINE_MAX > SSIZE_MAX
 #error Invalid maximum input line size !
-#endif /* CLI_LINE_MAX > SSIZE_MAX */
+#endif /* CONFIG_CLI_LINE_MAX > SSIZE_MAX */
 
 /*
  * Maximum size available to store a xpath including the terminating NULL byte.
  */
-#define CLI_XPATH_MAX (128U)
+#define CONFIG_CLI_XPATH_MAX 128
+#if CONFIG_CLI_XPATH_MAX > SSIZE_MAX
+#error Invalid maximum XPATH size !
+#endif /* CONFIG_CLI_XPATH_MAX > SSIZE_MAX */
+
+#define CLI_CONCAT(_x, _y) \
+	__CONCAT(_x, _y)
+
+#define CLI_LINE_MAX  CLI_CONCAT(CONFIG_CLI_LINE_MAX, U)
+#define CLI_XPATH_MAX CLI_CONCAT(CONFIG_CLI_XPATH_MAX, U)
 
 /******************************************************************************
  * Utilities
  ******************************************************************************/
-
-#include <stdio.h>
 
 #define __cli_unused __attribute__((__unused__))
 
@@ -95,6 +103,12 @@ static inline void
 cli_free(void * data)
 {
 	free(data);
+}
+
+static inline int
+cli_render_chr(int chr)
+{
+	return isprint(chr) ? chr : '?';
 }
 
 #define CLI_RENDER_MAX (16U)

@@ -32,7 +32,7 @@ struct cli_expr_blk;
 
 extern int
 cli_shell_read_expr(const struct cli_shell * shell,
-                    struct cli_expr_blk *    block);
+                    struct cli_expr_blk *    expr_block);
 
 extern int
 cli_shell_init(struct cli_shell * shell, bool history);

@@ -3,6 +3,39 @@
 #include <string.h>
 
 /******************************************************************************
+ * Argument utilities
+ ******************************************************************************/
+
+static const char cli_arg_valid_chrs[] = "abcdefghijklmnopqrstuvwxyz"
+                                         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                         "0123456789"
+                                         " /-_.,:@";
+
+#if 0
+/* Keep this just in case we would need it. */
+static bool
+cli_arg_ischr_valid(int chr)
+{
+	return !!memchr(cli_arg_valid_chrs,
+	                chr,
+	                sizeof(cli_arg_valid_chrs) - 1);
+}
+#endif
+
+size_t
+_cli_arg_isstr_valid(const char * string, size_t length)
+{
+	cli_assert(string);
+	cli_assert(length);
+	cli_assert(length < CLI_ARG_MAX);
+	cli_assert(strnlen(string, length) == length);
+
+	size_t len = strspn(string, cli_arg_valid_chrs);
+
+	return (string[len] == '\0') ? 0 : len;
+}
+
+/******************************************************************************
  * Base argument handling
  ******************************************************************************/
 

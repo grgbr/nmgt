@@ -3,12 +3,18 @@
 
 #include "common.h"
 
+/******************************************************************************
+ * Base command line expression handling.
+ ******************************************************************************/
+
 struct cli_expr {
 	struct cli_expr * next;
 	unsigned int      cnt;
 	unsigned int      nr;
 	const char **     args;
 };
+
+#define CLI_EXPR_ARGS_MAX  (CLI_LINE_MAX / 2U)
 
 #define cli_expr_assert(_expr) \
 	cli_assert(_expr); \
@@ -27,7 +33,7 @@ cli_expr_arg_cnt(const struct cli_expr * expression)
 }
 
 static inline const char * const *
-cli_expr_arg_cnt(const struct cli_expr * expression)
+cli_expr_args(const struct cli_expr * expression)
 {
 	cli_expr_assert(expression);
 	cli_assert(expression->cnt);
@@ -60,7 +66,7 @@ struct cli_expr_blk {
 	{ \
 		.cnt  = 0, \
 		.head = NULL, \
-		.tail = &(_blk)->head, \
+		.tail = &(_blk).head, \
 		.line = NULL \
 	}
 
@@ -74,6 +80,14 @@ struct cli_expr_blk {
 
 extern int
 cli_expr_blk_parse_line(struct cli_expr_blk * block, char * line);
+
+#if 0
+/* Keep this just in case we need to save parsed line into history. */
+extern ssize_t
+cli_expr_blk_make_string(const struct cli_expr_blk * block,
+                         char *                      string,
+                         size_t                      size);
+#endif
 
 extern void
 cli_expr_blk_init(struct cli_expr_blk * block);

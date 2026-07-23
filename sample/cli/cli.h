@@ -12,6 +12,10 @@
  ******************************************************************************/
 
 #define CLI_WORK_NR (128U)
+#if CLI_WORK_NR < CLI_EXPR_BLK_MAX
+#error The number of differed work MUST be large enough to support, at least, \
+       a full block of expressions !
+#endif /* CLI_WORK_NR < CLI_EXPR_BLK_MAX */
 
 struct cli_context {
 	sr_conn_ctx_t *        conn;
