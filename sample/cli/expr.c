@@ -82,7 +82,7 @@ cli_expr_push_arg(struct cli_expr * expression,
 	return 0;
 }
 
-static int
+int
 cli_expr_parse_string(struct cli_expr * expression, char * string)
 {
 	cli_expr_assert(expression);
@@ -185,6 +185,19 @@ cli_expr_make_string(const struct cli_expr * expression,
 }
 #endif
 
+void
+cli_expr_init(struct cli_expr * expression)
+{
+	cli_assert(expression);
+
+	expression->next = NULL;
+	expression->cnt = 0;
+	expression->nr = CLI_EXPR_ARGS_INIT;
+	expression->args = cli_malloc(CLI_EXPR_ARGS_INIT *
+	                              sizeof(expr->args[0]));
+	cli_assert(expr->args);
+}
+
 static struct cli_expr *
 cli_expr_create(void)
 {
@@ -193,13 +206,17 @@ cli_expr_create(void)
 	expr = cli_malloc(sizeof(*expr));
 	cli_assert(expr);
 
-	expr->next = NULL;
-	expr->cnt = 0;
-	expr->nr = CLI_EXPR_ARGS_INIT;
-	expr->args = cli_malloc(CLI_EXPR_ARGS_INIT * sizeof(expr->args[0]));
-	cli_assert(expr->args);
+	cli_expr_init(expr);
 
 	return expr;
+}
+
+void
+cli_expr_fini(struct cli_expr * expression)
+{
+	cli_expr_assert(expression);
+
+	cli_free(expression->args);
 }
 
 static void
@@ -207,7 +224,8 @@ cli_expr_destroy(struct cli_expr * expression)
 {
 	cli_expr_assert(expression);
 
-	cli_free(expression->args);
+	cli_expr_fini(expression);
+
 	cli_free(expression);
 }
 

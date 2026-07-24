@@ -1,5 +1,6 @@
 #include "shell.h"
 #include "expr.h"
+#include "arg.h"
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <unistd.h>
@@ -190,8 +191,97 @@ cli_shell_fini_hist(struct cli_shell * shell)
 	cli_free(shell->hpath);
 }
 
+static char **
+cli_shell_build_matches(struct cli_shell *      shell,
+                        const struct cli_expr * expression,
+                        const char *            word,
+                        size_t                  length)
+{
+#warning Implement me!
+	return NULL;
+}
+
+static char **
+cli_shell_complete(const char * word, int start, int end)
+{
+	cli_assert(word);
+	cli_assert(start >= 0);
+	cli_assert(end >= 0);
+	cli_assert(start <= end);
+	cli_assert(end <= rl_end);
+	cli_assert(strlen(word) == (size_t)(end - start));
+
+	struct cli_exp expr;
+	char **        match = NULL;
+
+	cli_expr_init(&expr);
+
+	if (start) {
+		int    begin;
+		char * ln;
+
+		if (((size_t)end >= CLI_LINE_MAX) ||
+		    ((size_t)(end - start) >= CLI_ARG_MAX))
+			return NULL;
+
+		/*
+		 * Probe for start of last command within the current command
+		 * line...
+		 */
+		begin = end;
+		while (begin && (rl_line_buffer[begin - 1] != ';'))
+			begin--;
+		/*
+		 * ...and duplicate the command up to the word to complete into
+		 * a newly allocated string.
+		 */
+		ln = cli_malloc((end - begin) + 1);
+		cli_assert(ln);
+		memcpy(ln, &rl_line_buffer[begin], end - begin);
+		ln[end - begin] = '\0';
+
+		ret = cli_expr_parse_string(&expr, ln);
+		if (!ret)
+			match = cli_shell_build_matches(shell,
+			                                &expr,
+			                                word,
+			                                (size_t)(end - start));
+		cli_expr_fini(&expr);
+		cli_free(ln);
+
+		return match;
+	}
+
+	cli_expr_fini(&expr);
+
+	return match;
+}
+
+/* Disable readline's default completion logic. */
+static char *
+cli_shell_null_complete(const char *word __cli_unused, int len __cli_unused)
+{
+	return NULL;
+}
+
+static void
+cli_shell_setup_compl(bool enable)
+{
+	if (enable) {
+		/*
+		 * Install our own cli_shell_complete() completion function and
+		 * disable readline's default completion logic.
+		 */
+		rl_attempted_completion_function = cli_shell_complete;
+		rl_completion_entry_function = cli_shell_null_complete;
+		rl_inhibit_completion = 0;
+	}
+	else
+		rl_inhibit_completion = 1;
+}
+
 int
-cli_shell_init(struct cli_shell * shell, bool history)
+cli_shell_init(struct cli_shell * shell, bool complete, bool history)
 {
 	const char * user;
 	char *       host;
@@ -217,7 +307,7 @@ cli_shell_init(struct cli_shell * shell, bool history)
 	shell->hpath = NULL;
 	shell->shutdown = 0;
 
-	rl_inhibit_completion = 1;
+	cli_shell_setup_compl(complete);
 
 	if (history)
 		shell->hpath = cli_shell_init_hist();

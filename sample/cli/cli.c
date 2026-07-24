@@ -465,7 +465,7 @@ main(int argc, const char * const argv[])
 			/* Cannot run in interactive mode... */
 			goto fini;
 
-		ret = cli_shell_init(&ctx.shell, true);
+		ret = cli_shell_init(&ctx.shell, true, true);
 		if (ret)
 			goto fini_shell;
 

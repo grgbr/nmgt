@@ -41,6 +41,15 @@ cli_expr_args(const struct cli_expr * expression)
 	return expression->args;
 }
 
+extern int
+cli_expr_parse_string(struct cli_expr * expression, char * string);
+
+extern void
+cli_expr_init(struct cli_expr * expression);
+
+extern void
+cli_expr_fini(struct cli_expr * expression);
+
 /******************************************************************************
  * Command line expression block / sequence handling.
  ******************************************************************************/

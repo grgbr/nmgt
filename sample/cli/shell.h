@@ -35,7 +35,7 @@ cli_shell_read_expr(const struct cli_shell * shell,
                     struct cli_expr_blk *    expr_block);
 
 extern int
-cli_shell_init(struct cli_shell * shell, bool history);
+cli_shell_init(struct cli_shell * shell, bool complete, bool history);
 
 extern void
 cli_shell_fini(struct cli_shell * shell);
