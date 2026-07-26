@@ -75,7 +75,8 @@ destroy:
 }
 
 static const struct cli_cmd_ops cli_xpath_cmd_ops = {
-	.parse = cli_xpath_parse_cmd,
+	.parse    = cli_xpath_parse_cmd,
+	.complete = cli_cmd_complete_args
 };
 
 void
@@ -90,7 +91,7 @@ cli_xpath_build_cmd(struct cli_dir * directory)
 	 * with the "xpath" name argument.
 	 */
 	cli_assert(sizeof("xpath") <= CLI_ARG_MAX);
-	cli_cmd_createn_add(&cmd, "find", &cli_xpath_cmd_ops, directory);
+	cli_cmd_createn_add(&cmd, "xpath", &cli_xpath_cmd_ops, directory);
 
 	/* Cannot fail either. */
 	cli_dir_work_createn_add_arg(false, (struct cli_node *)cmd);

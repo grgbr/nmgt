@@ -1,5 +1,6 @@
 #include "dir.h"
 #include "yang.h"
+#include "match.h"
 #include <errno.h>
 
 static int
@@ -366,6 +367,37 @@ cli_dir_parse_cmd(const struct cli_dir * directory,
 }
 
 void
+cli_dir_complete_cmd(const struct cli_dir * directory,
+                     struct cli_context *   context,
+                     const char *           word,
+                     size_t                 length,
+                     int                    argc,
+                     const char * const     argv[],
+                     struct cli_match *     matches)
+{
+	cli_dir_assert(directory);
+	cli_assert_context(context);
+	cli_assert(word);
+	cli_assert(length < CLI_ARG_MAX);
+	cli_assert(strnlen(word, CLI_ARG_MAX) == length);
+	cli_assert(argc >= 0);
+	cli_assert(!argc || argv);
+	cli_match_assert(matches);
+
+	const struct cli_node * cmd;
+
+	cli_node_foreach_sibling((struct cli_node *)directory->cmds, cmd)
+		cli_cmd_complete((const struct cli_cmd *)cmd,
+		                 directory,
+		                 context,
+		                 word,
+		                 length,
+		                 argc,
+		                 argv,
+		                 matches);
+}
+
+void
 cli_dir_add_child(struct cli_dir * directory, struct cli_dir * child)
 {
 	cli_dir_assert(directory);
@@ -555,7 +587,6 @@ cli_dir_work_parse(struct cli_dir_work * work,
 	if (!work->orig) {
 		ssize_t ret = 0;
 
-
 		if (*path != '\0') {
 			ret = cli_path_parse(&work->path, path);
 			if (ret)
@@ -646,13 +677,13 @@ struct cli_dir_work_arg {
 };
 
 static int
-cli_dir_work_parse_arg(const struct cli_arg *     argument,
-                       const struct cli_cmd *     command,
-                       const struct cli_dir *     directory __cli_unused,
-                       const struct cli_context * context __cli_unused,
-                       int                        argc,
-                       const char * const         argv[],
-                       void *                     data)
+cli_dir_work_parse_arg(const struct cli_arg * argument,
+                       const struct cli_cmd * command,
+                       const struct cli_dir * directory __cli_unused,
+                       struct cli_context *   context __cli_unused,
+                       int                    argc,
+                       const char * const     argv[],
+                       void *                 data)
 {
 	cli_arg_assert(argument);
 	cli_cmd_assert(command);
@@ -673,8 +704,61 @@ cli_dir_work_parse_arg(const struct cli_arg *     argument,
 	return (ret != -EALREADY) ? ret : 0;
 }
 
+static void
+cli_dir_work_complete_arg(const struct cli_arg * argument __cli_unused,
+                          const struct cli_cmd * command __cli_unused,
+                          const struct cli_dir * directory __cli_unused,
+                          struct cli_context *   context __cli_unused,
+                          const char *           word,
+                          size_t                 length,
+                          int                    argc __cli_unused,
+                          const char * const     argv[] __cli_unused,
+                          struct cli_match *     matches)
+{
+	cli_arg_assert(argument);
+	cli_cmd_assert(command);
+	cli_dir_assert(directory);
+	cli_assert_context(context);
+	cli_match_assert(matches);
+
+	const struct cli_dir * parent = cli_cwd(context);
+	int                    ret;
+	const struct cli_dir * child;
+
+	if (length) {
+		FINISH ME!!
+		ret = cli_dir_search(&parent, const char * path)
+		if (ret)
+			return;
+	}
+
+	cli_dir_foreach_child(parent, child) {
+		if (!length || !strncmp(word, child->name, length)) {
+			char * path;
+
+			if (cli_dir_has_child(child)) {
+				ret = cli_asprintf(&path, "%s/", child->name);
+				cli_assert(ret >= 2);
+			}
+			else
+				path = cli_strdup(child->name);
+			cli_assert(path);
+
+			/*
+			 * Give ownership of `kw' to `matches'. Allocated string
+			 * ownership will be transfered from `matches' to
+			 * readline(3) by cli_shell_complete().
+			 * Readline(3) will free(3) it at completion process
+			 * termination time.
+			 */
+			cli_match_push(matches, path);
+		}
+	}
+}
+
 static const struct cli_arg_ops cli_dir_work_arg_ops = {
-	.parse = cli_dir_work_parse_arg
+	.parse    = cli_dir_work_parse_arg,
+	.complete = cli_dir_work_complete_arg
 };
 
 struct cli_dir_work_arg *

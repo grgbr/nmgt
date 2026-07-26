@@ -73,7 +73,8 @@ destroy:
 }
 
 static const struct cli_cmd_ops cli_list_cmd_ops = {
-	.parse = cli_list_parse_cmd,
+	.parse    = cli_list_parse_cmd,
+	.complete = cli_cmd_complete_args
 };
 
 void

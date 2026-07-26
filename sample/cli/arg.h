@@ -10,6 +10,7 @@ struct cli_arg;
 struct cli_cmd;
 struct cli_dir;
 struct cli_context;
+struct cli_match;
 
 /******************************************************************************
  * Argument utilities
@@ -25,18 +26,30 @@ _cli_arg_isstr_valid(const char * string, size_t length);
 typedef int cli_arg_parse_fn(const struct cli_arg *,
                              const struct cli_cmd *,
                              const struct cli_dir *,
-                             const struct cli_context *,
+                             struct cli_context *,
                              int,
                              const char * const [],
                              void *);
 
+typedef void cli_arg_complete_fn(const struct cli_arg *,
+                                 const struct cli_cmd *,
+                                 const struct cli_dir *,
+                                 struct cli_context *,
+                                 const char *,
+                                 size_t,
+                                 int,
+                                 const char * const [],
+                                 struct cli_match *);
+
 struct cli_arg_ops {
-	cli_arg_parse_fn * parse;
+	cli_arg_parse_fn *    parse;
+	cli_arg_complete_fn * complete;
 };
 
 #define cli_arg_assert_ops(_opers) \
 	cli_assert(_opers); \
-	cli_assert((_opers)->parse)
+	cli_assert((_opers)->parse); \
+	cli_assert((_opers)->complete)
 
 struct cli_arg {
 	struct cli_node            super;
@@ -48,13 +61,13 @@ struct cli_arg {
 	cli_arg_assert_ops((_arg)->ops)
 
 static inline int
-cli_arg_parse(const struct cli_arg *     argument,
-              const struct cli_cmd *     command,
-              const struct cli_dir *     directory,
-              const struct cli_context * context,
-              int                        argc,
-              const char * const         argv[],
-              void *                     data)
+cli_arg_parse(const struct cli_arg * argument,
+              const struct cli_cmd * command,
+              const struct cli_dir * directory,
+              struct cli_context *   context,
+              int                    argc,
+              const char * const     argv[],
+              void *                 data)
 {
 	cli_arg_assert(argument);
 	cli_assert(command);
@@ -71,6 +84,39 @@ cli_arg_parse(const struct cli_arg *     argument,
 	                            argc,
 	                            argv,
 	                            data);
+}
+
+static inline void
+cli_arg_complete(const struct cli_arg * argument,
+                 const struct cli_cmd * command,
+                 const struct cli_dir * directory,
+                 struct cli_context *   context,
+                 const char *           word,
+                 size_t                 length,
+                 int                    argc,
+                 const char * const     argv[],
+                 struct cli_match *     matches)
+{
+	cli_arg_assert(argument);
+	cli_assert(command);
+	cli_assert(directory);
+	cli_assert(context);
+	cli_assert(word);
+	cli_assert(length < CLI_ARG_MAX);
+	cli_assert(strnlen(word, CLI_ARG_MAX) == length);
+	cli_assert(argc >= 0);
+	cli_assert(!argc || argv);
+	cli_assert(matches);
+
+	return argument->ops->complete(argument,
+	                               command,
+	                               directory,
+	                               context,
+	                               word,
+	                               length,
+	                               argc,
+	                               argv,
+	                               matches);
 }
 
 static inline void

@@ -1,7 +1,6 @@
 #include "shell.h"
 #include "expr.h"
 #include "arg.h"
-#include <readline/readline.h>
 #include <readline/history.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -30,7 +29,7 @@ cli_shell_read_line(const struct cli_shell * shell, char ** line)
 		goto free;
 	}
 
-	if (!*ln) {
+	if (ln[strspn(ln, " \t")] == '\0') {
 		/* Empty input line... */
 		ret = -ENODATA;
 		goto free;
@@ -191,87 +190,128 @@ cli_shell_fini_hist(struct cli_shell * shell)
 	cli_free(shell->hpath);
 }
 
-static char **
-cli_shell_build_matches(struct cli_shell *      shell,
-                        const struct cli_expr * expression,
-                        const char *            word,
-                        size_t                  length)
+/* TODO: make shell a singleton ?? */
+static struct cli_shell * cli_the_shell;
+
+static char *
+cli_shell_generate_match(const char * word __cli_unused, int state)
 {
-#warning Implement me!
-	return NULL;
+	cli_assert(word);
+	cli_assert(state >= 0);
+
+	return cli_match_get(&cli_the_shell->matches, state);
 }
 
 static char **
-cli_shell_complete(const char * word, int start, int end)
+cli_shell_complete(const char * word, int begin, int end)
 {
 	cli_assert(word);
-	cli_assert(start >= 0);
+	cli_assert(begin >= 0);
 	cli_assert(end >= 0);
-	cli_assert(start <= end);
+	cli_assert(begin <= end);
 	cli_assert(end <= rl_end);
-	cli_assert(strlen(word) == (size_t)(end - start));
+	cli_assert(strlen(word) == (size_t)(end - begin));
 
-	struct cli_exp expr;
-	char **        match = NULL;
+	char ** match = NULL;
 
-	cli_expr_init(&expr);
-
-	if (start) {
-		int    begin;
-		char * ln;
-
-		if (((size_t)end >= CLI_LINE_MAX) ||
-		    ((size_t)(end - start) >= CLI_ARG_MAX))
-			return NULL;
+	if (((size_t)end < CLI_LINE_MAX) &&
+	    ((size_t)(end - begin) < CLI_ARG_MAX)) {
+		int             first = begin;
+		int             last = begin;
+		struct cli_expr expr;
 
 		/*
-		 * Probe for start of last command within the current command
-		 * line...
+		 * Probe for the begining of last command within the current
+		 * line, then get rid of leading spaces from there...
 		 */
-		begin = end;
-		while (begin && (rl_line_buffer[begin - 1] != ';'))
-			begin--;
-		/*
-		 * ...and duplicate the command up to the word to complete into
-		 * a newly allocated string.
-		 */
-		ln = cli_malloc((end - begin) + 1);
-		cli_assert(ln);
-		memcpy(ln, &rl_line_buffer[begin], end - begin);
-		ln[end - begin] = '\0';
+		first = begin;
+		while (first && (rl_line_buffer[first - 1] != ';'))
+			first--;
+		first += strspn(&rl_line_buffer[first], " \t");
+		cli_assert(first <= begin);
 
-		ret = cli_expr_parse_string(&expr, ln);
-		if (!ret)
-			match = cli_shell_build_matches(shell,
-			                                &expr,
-			                                word,
-			                                (size_t)(end - start));
-		cli_expr_fini(&expr);
-		cli_free(ln);
+		/* ...in addition, also get rid of trailing spaces. */
+		while (last &&
+		       (rl_line_buffer[last - 1] == ' ' ||
+		        rl_line_buffer[last - 1] == '\t'))
+			last--;
+		cli_assert(last <= begin);
+		cli_assert(last >= first);
 
-		return match;
+		cli_match_init(&cli_the_shell->matches);
+
+		if (last - first) {
+			char * ln;
+
+
+			/*
+			 * ...then duplicate the command up and including the
+			 * word preceding the word to complete into a newly
+			 * allocated string.
+			 */
+			ln = cli_malloc((last - first) + 1);
+			cli_assert(ln);
+			memcpy(ln, &rl_line_buffer[first], last - first);
+			ln[last - first] = '\0';
+
+			cli_expr_init(&expr);
+			if (!cli_expr_parse_string(&expr, ln))
+				cli_the_shell->complete(
+					cli_the_shell,
+					word,
+					(size_t)(end - begin),
+					cli_expr_arg_cnt(&expr),
+					cli_expr_args(&expr),
+					&cli_the_shell->matches);
+			cli_expr_fini(&expr);
+
+			cli_free(ln);
+		}
+		else
+			cli_the_shell->complete(cli_the_shell,
+			                        word,
+			                        (size_t)(end - begin),
+			                        0,
+			                        NULL,
+			                        &cli_the_shell->matches);
+		if (cli_match_count(&cli_the_shell->matches))
+			match = rl_completion_matches(word,
+			                              cli_shell_generate_match);
+		cli_match_fini(&cli_the_shell->matches);
 	}
 
-	cli_expr_fini(&expr);
-
+	/*
+	 * Give ownership of matched strings to readline(3). It will free(3)
+	 * them at completion process termination time.
+	 */
 	return match;
 }
 
 /* Disable readline's default completion logic. */
 static char *
-cli_shell_null_complete(const char *word __cli_unused, int len __cli_unused)
+cli_shell_null_complete(const char * word __cli_unused, int len __cli_unused)
 {
 	return NULL;
 }
 
 static void
-cli_shell_setup_compl(bool enable)
+cli_shell_setup_compl(struct cli_shell *      shell,
+                      const char *            word_break_chars,
+                      cli_shell_complete_fn * complete)
 {
-	if (enable) {
+	cli_assert(shell);
+	cli_assert(!complete || word_break_chars);
+	cli_assert(!complete || (word_break_chars[0] != '\0'));
+
+	if (complete) {
+		shell->complete = complete;
+		cli_the_shell = shell;
+
 		/*
 		 * Install our own cli_shell_complete() completion function and
 		 * disable readline's default completion logic.
 		 */
+		rl_basic_word_break_characters = word_break_chars;
 		rl_attempted_completion_function = cli_shell_complete;
 		rl_completion_entry_function = cli_shell_null_complete;
 		rl_inhibit_completion = 0;
@@ -281,8 +321,15 @@ cli_shell_setup_compl(bool enable)
 }
 
 int
-cli_shell_init(struct cli_shell * shell, bool complete, bool history)
+cli_shell_init(struct cli_shell *      shell,
+               bool                    history,
+               const char *            word_break_chars,
+               cli_shell_complete_fn * complete)
 {
+	cli_assert(shell);
+	cli_assert(!complete || word_break_chars);
+	cli_assert(!complete || (word_break_chars[0] != '\0'));
+
 	const char * user;
 	char *       host;
 	int          ret;
@@ -307,7 +354,7 @@ cli_shell_init(struct cli_shell * shell, bool complete, bool history)
 	shell->hpath = NULL;
 	shell->shutdown = 0;
 
-	cli_shell_setup_compl(complete);
+	cli_shell_setup_compl(shell, word_break_chars, complete);
 
 	if (history)
 		shell->hpath = cli_shell_init_hist();

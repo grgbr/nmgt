@@ -68,6 +68,40 @@ cli_cmd_parse_args(const struct cli_cmd * command,
 	return -EINVAL;
 }
 
+void
+cli_cmd_complete_args(const struct cli_cmd * command,
+                      const struct cli_dir * directory,
+                      struct cli_context *   context,
+                      const char *           word,
+                      size_t                 length,
+                      int                    argc,
+                      const char * const     argv[],
+                      struct cli_match *     matches)
+{
+	cli_cmd_assert(command);
+	cli_dir_assert(directory);
+	cli_assert_context(context);
+	cli_assert(word);
+	cli_assert(length < CLI_ARG_MAX);
+	cli_assert(strnlen(word, CLI_ARG_MAX) == length);
+	cli_assert(argc >= 0);
+	cli_assert(!argc || argv);
+	cli_match_assert(matches);
+
+	struct cli_node * child;
+
+	cli_node_foreach_child(&command->super, child)
+		cli_arg_complete((const struct cli_arg *)child,
+		                 command,
+		                 directory,
+		                 context,
+		                 word,
+		                 length,
+		                 argc,
+		                 argv,
+		                 matches);
+}
+
 int
 cli_cmd_parse(const struct cli_cmd * command,
               const struct cli_dir * directory,
@@ -95,6 +129,47 @@ cli_cmd_parse(const struct cli_cmd * command,
 	}
 
 	return ret;
+}
+
+void
+cli_cmd_complete(const struct cli_cmd * command,
+                 const struct cli_dir * directory,
+                 struct cli_context *   context,
+                 const char *           word,
+                 size_t                 length,
+                 int                    argc,
+                 const char * const     argv[],
+                 struct cli_match *     matches)
+{
+	cli_cmd_assert(command);
+	cli_dir_assert(directory);
+	cli_assert_context(context);
+	cli_assert(word);
+	cli_assert(length < CLI_ARG_MAX);
+	cli_assert(strnlen(word, CLI_ARG_MAX) == length);
+	cli_assert(argc >= 0);
+	cli_assert(!argc || argv);
+	cli_match_assert(matches);
+
+	if (argc) {
+		if (!strcmp(argv[0], command->name))
+			command->ops->complete(command,
+			                       directory,
+			                       context,
+			                       word,
+			                       length,
+			                       argc - 1,
+			                       &argv[1],
+			                       matches);
+	}
+	else if (!length || !strncmp(word, command->name, length)) {
+		char * name;
+
+		name = cli_strdup(command->name);
+		cli_assert(name);
+
+		cli_match_push(matches, name);
+	}
 }
 
 int

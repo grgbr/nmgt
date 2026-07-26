@@ -6,6 +6,7 @@
 struct cli_cmd;
 struct cli_dir;
 struct cli_context;
+struct cli_match;
 
 typedef int cli_cmd_parse_fn(const struct cli_cmd *,
                              const struct cli_dir *,
@@ -13,13 +14,24 @@ typedef int cli_cmd_parse_fn(const struct cli_cmd *,
                              int,
                              const char * const []);
 
+typedef void cli_cmd_complete_fn(const struct cli_cmd *,
+                                 const struct cli_dir *,
+                                 struct cli_context *,
+                                 const char *,
+                                 size_t,
+                                 int,
+                                 const char * const [],
+                                 struct cli_match *);
+
 struct cli_cmd_ops {
-	cli_cmd_parse_fn * parse;
+	cli_cmd_parse_fn *    parse;
+	cli_cmd_complete_fn * complete;
 };
 
 #define cli_cmd_assert_ops(_ops) \
 	cli_assert(_ops); \
-	cli_assert((_ops)->parse)
+	cli_assert((_ops)->parse); \
+	cli_assert((_ops)->complete)
 
 struct cli_cmd {
 	struct cli_node            super;
@@ -52,6 +64,26 @@ cli_cmd_parse(const struct cli_cmd * command,
               struct cli_context *   context,
               int                    argc,
               const char * const     argv[]);
+
+extern void
+cli_cmd_complete_args(const struct cli_cmd * command,
+                      const struct cli_dir * directory,
+                      struct cli_context *   context,
+                      const char *           word,
+                      size_t                 length,
+                      int                    argc,
+                      const char * const     argv[],
+                      struct cli_match *     matches);
+
+extern void
+cli_cmd_complete(const struct cli_cmd * command,
+                 const struct cli_dir * directory,
+                 struct cli_context *   context,
+                 const char *           word,
+                 size_t                 length,
+                 int                    argc,
+                 const char * const     argv[],
+                 struct cli_match *     matches);
 
 static inline void
 cli_cmd_add_arg(struct cli_cmd * command, struct cli_arg * argument)

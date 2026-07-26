@@ -56,7 +56,8 @@ destroy:
 }
 
 static const struct cli_cmd_ops cli_quit_cmd_ops = {
-	.parse = cli_quit_parse_cmd,
+	.parse    = cli_quit_parse_cmd,
+	.complete = cli_cmd_complete_args
 };
 
 void

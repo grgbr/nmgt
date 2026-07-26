@@ -1,5 +1,8 @@
 #include "arg.h"
+#include "match.h"
 #include "cmd.h"
+#include "dir.h"
+#include "cli.h"
 #include <string.h>
 
 /******************************************************************************
@@ -9,7 +12,7 @@
 static const char cli_arg_valid_chrs[] = "abcdefghijklmnopqrstuvwxyz"
                                          "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                          "0123456789"
-                                         " /-_.,:@";
+                                         " /-_.=,:@";
 
 #if 0
 /* Keep this just in case we would need it. */
@@ -137,16 +140,18 @@ cli_arg_create_parm(struct cli_arg_parm **     parameter,
  ******************************************************************************/
 
 static int
-cli_arg_parse_choice(const struct cli_arg *     choice,
-                     const struct cli_cmd *     command,
-                     const struct cli_dir *     directory,
-                     const struct cli_context * context,
-                     int                        argc,
-                     const char * const         argv[],
-                     void *                     data)
+cli_arg_parse_choice(const struct cli_arg * choice,
+                     const struct cli_cmd * command,
+                     const struct cli_dir * directory,
+                     struct cli_context *   context,
+                     int                    argc,
+                     const char * const     argv[],
+                     void *                 data)
 {
 	cli_arg_assert(choice);
 	cli_cmd_assert(command);
+	cli_dir_assert(directory);
+	cli_assert_context(context);
 	cli_assert(argc >= 1);
 	cli_assert(argv[0]);
 	cli_assert(strnlen(argv[0], CLI_ARG_MAX) < CLI_ARG_MAX);
@@ -173,8 +178,40 @@ cli_arg_parse_choice(const struct cli_arg *     choice,
 	return -EINVAL;
 }
 
+static void
+cli_arg_complete_choice(const struct cli_arg * choice,
+                        const struct cli_cmd * command,
+                        const struct cli_dir * directory,
+                        struct cli_context *   context,
+                        const char *           word,
+                        size_t                 length,
+                        int                    argc,
+                        const char * const     argv[],
+                        struct cli_match *     matches)
+{
+	cli_arg_assert(choice);
+	cli_cmd_assert(command);
+	cli_dir_assert(directory);
+	cli_assert_context(context);
+	cli_match_assert(matches);
+
+	const struct cli_node * opt;
+
+	cli_node_foreach_child(&choice->super, opt)
+		cli_arg_complete((const struct cli_arg *)opt,
+		                 command,
+		                 directory,
+		                 context,
+		                 word,
+		                 length,
+		                 argc,
+		                 argv,
+		                 matches);
+}
+
 static const struct cli_arg_ops cli_arg_choice_ops = {
-	.parse = cli_arg_parse_choice
+	.parse    = cli_arg_parse_choice,
+	.complete = cli_arg_complete_choice
 };
 
 struct cli_arg *
@@ -238,7 +275,7 @@ cli_arg_parse_kword_term(const struct cli_arg_kword_term * terminal,
                          const struct cli_arg_kword_parm * parameter,
                          const struct cli_cmd *            command,
                          const struct cli_dir *            directory,
-                         const struct cli_context *        context,
+                         struct cli_context *              context,
                          const char *                      string,
                          void *                            data)
 {
@@ -261,15 +298,18 @@ cli_arg_parse_kword_term(const struct cli_arg_kword_term * terminal,
 }
 
 static int
-cli_arg_parse_kword_parm(const struct cli_arg *     argument,
-                         const struct cli_cmd *     command,
-                         const struct cli_dir *     directory,
-                         const struct cli_context * context,
-                         int                        argc,
-                         const char * const         argv[],
-                         void *                     data)
+cli_arg_parse_kword_parm(const struct cli_arg * argument,
+                         const struct cli_cmd * command,
+                         const struct cli_dir * directory,
+                         struct cli_context *   context,
+                         int                    argc,
+                         const char * const     argv[],
+                         void *                 data)
 {
 	cli_arg_assert_kword_parm((const struct cli_arg_kword_parm *)argument);
+	cli_cmd_assert(command);
+	cli_dir_assert(directory);
+	cli_assert_context(context);
 	cli_assert(argc == 1);
 	cli_assert(argv[0]);
 	cli_assert(strnlen(argv[0], CLI_ARG_MAX) < CLI_ARG_MAX);
@@ -317,8 +357,105 @@ cli_arg_parse_kword_parm(const struct cli_arg *     argument,
 	return -EINVAL;
 }
 
+static void
+cli_arg_complete_kword_term(const struct cli_arg_kword_term * terminal,
+                            const struct cli_arg_kword_parm * parameter,
+                            const char *                      word,
+                            size_t                            length,
+                            struct cli_match *                matches)
+{
+	cli_arg_assert_kword_term(terminal);
+
+	if (!length ||
+	    ((length <= terminal->len) &&
+	     !memcmp(word, terminal->value, length))) {
+		char * kw;
+		int    ret;
+
+		ret = cli_asprintf(&kw,
+		                   "%s=%s",
+		                   parameter->super.name,
+		                   terminal->value);
+		cli_assert((size_t)ret ==
+		           (parameter->super.len + 1 + terminal->len));
+
+		/*
+		 * Give ownership of `kw' to `matches'. Allocated string
+		 * ownership will be transfered from `matches' to readline(3) by
+		 * cli_shell_complete().
+		 * Readline(3) will free(3) it at completion process termination
+		 * time.
+		 */
+		cli_match_push(matches, kw);
+	}
+}
+
+static void
+cli_arg_complete_kword_parm(const struct cli_arg * argument,
+                            const struct cli_cmd * command __cli_unused,
+                            const struct cli_dir * directory __cli_unused,
+                            struct cli_context *   context __cli_unused,
+                            const char *           word,
+                            size_t                 length,
+                            int                    argc __cli_unused,
+                            const char * const     argv[] __cli_unused,
+                            struct cli_match *     matches)
+{
+	cli_arg_assert_kword_parm((const struct cli_arg_kword_parm *)argument);
+	cli_cmd_assert(command);
+	cli_dir_assert(directory);
+	cli_assert_context(context);
+	cli_match_assert(matches);
+
+	const struct cli_arg_kword_parm * parm =
+		(const struct cli_arg_kword_parm *)argument;
+
+	if (length <= parm->super.len) {
+		if (!length || !memcmp(word, parm->super.name, length)) {
+			char * name;
+			int    ret;
+
+			ret = cli_asprintf(&name, "%s=", parm->super.name);
+			cli_assert((size_t)ret == (parm->super.len + 1));
+
+			/*
+			 * Give ownership of `name' to `matches'. Allocated
+			 * string ownership will be transfered from `matches' to
+			 * readline(3) by cli_shell_complete().
+			 * Readline(3) will free(3) it at completion process
+			 * termination time.
+			 */
+			cli_match_push(matches, name);
+
+			/*
+			 * Disable appending the completion character after a
+			 * selected match.
+			 */
+			cli_shell_suppress_complete_char();
+		}
+	}
+	else if (!memcmp(word, parm->super.name, parm->super.len)) {
+		unsigned int t;
+
+		word = &word[parm->super.len];
+		length -= parm->super.len;
+		if (*word == '=') {
+			word++;
+			length--;
+		}
+
+		for (t = 0; t < parm->nr; t++)
+			cli_arg_complete_kword_term(&parm->terms[t],
+			                            parm,
+			                            word,
+			                            length,
+			                            matches);
+	}
+}
+
 static const struct cli_arg_ops cli_arg_kword_parm_ops = {
-	.parse = cli_arg_parse_kword_parm
+	.parse    = cli_arg_parse_kword_parm,
+	.complete = cli_arg_complete_kword_parm
 };
 
 int

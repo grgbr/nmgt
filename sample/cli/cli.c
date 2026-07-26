@@ -144,6 +144,43 @@ cli_parse_expr_blk(struct cli_context *        context,
 	return 0;
 }
 
+static void
+cli_complete(struct cli_shell * shell,
+             const char *       word,
+             size_t             length,
+             int                argc,
+             const char * const argv[],
+             struct cli_match * matches)
+{
+	cli_shell_assert(shell);
+	cli_assert(word);
+	cli_assert(length < CLI_ARG_MAX);
+	cli_assert(strnlen(word, CLI_ARG_MAX) == length);
+	cli_assert(argc >= 0);
+	cli_assert(!argc || argv);
+	cli_assert(matches);
+
+	struct cli_context * ctx = cli_containerof(shell,
+	                                           struct cli_context,
+	                                           shell);
+
+	cli_dir_complete_cmd(ctx->cwd,
+	                     ctx,
+	                     word,
+	                     length,
+	                     argc,
+	                     argv,
+	                     matches);
+	if (ctx->cwd != &ctx->root)
+		cli_dir_complete_cmd(&ctx->root,
+		                     ctx,
+		                     word,
+		                     length,
+		                     argc,
+		                     argv,
+		                     matches);
+}
+
 #if defined(CONFIG_CLI_LOG)
 
 static sr_log_level_t cli_log_lvl;
@@ -465,7 +502,7 @@ main(int argc, const char * const argv[])
 			/* Cannot run in interactive mode... */
 			goto fini;
 
-		ret = cli_shell_init(&ctx.shell, true, true);
+		ret = cli_shell_init(&ctx.shell, true, " \t;\n", cli_complete);
 		if (ret)
 			goto fini_shell;
 

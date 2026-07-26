@@ -194,8 +194,8 @@ cli_expr_init(struct cli_expr * expression)
 	expression->cnt = 0;
 	expression->nr = CLI_EXPR_ARGS_INIT;
 	expression->args = cli_malloc(CLI_EXPR_ARGS_INIT *
-	                              sizeof(expr->args[0]));
-	cli_assert(expr->args);
+	                              sizeof(expression->args[0]));
+	cli_assert(expression->args);
 }
 
 static struct cli_expr *

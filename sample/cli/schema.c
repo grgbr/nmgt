@@ -162,17 +162,18 @@ destroy:
 }
 
 static const struct cli_cmd_ops cli_schema_cmd_ops = {
-	.parse = cli_schema_parse_cmd,
+	.parse    = cli_schema_parse_cmd,
+	.complete = cli_cmd_complete_args
 };
 
 static int
-cli_schema_on_yang_match(const struct cli_arg *     argument __cli_unused,
-                         const struct cli_cmd *     command __cli_unused,
-                         const struct cli_dir *     directory __cli_unused,
-                         const struct cli_context * context __cli_unused,
-                         int                        argc __cli_unused,
-                         const char * const         argv[] __cli_unused,
-                         void *                     data)
+cli_schema_on_yang_match(const struct cli_arg * argument __cli_unused,
+                         const struct cli_cmd * command __cli_unused,
+                         const struct cli_dir * directory __cli_unused,
+                         struct cli_context *   context __cli_unused,
+                         int                    argc __cli_unused,
+                         const char * const     argv[] __cli_unused,
+                         void *                 data)
 {
 	((struct cli_schema_work *)data)->format = LYS_OUT_YANG_COMPILED;
 
@@ -182,13 +183,13 @@ cli_schema_on_yang_match(const struct cli_arg *     argument __cli_unused,
 #if defined(CONFIG_CLI_DEBUG)
 
 static int
-cli_schema_on_tree_match(const struct cli_arg *     argument __cli_unused,
-                         const struct cli_cmd *     command __cli_unused,
-                         const struct cli_dir *     directory __cli_unused,
-                         const struct cli_context * context __cli_unused,
-                         int                        argc __cli_unused,
-                         const char * const         argv[] __cli_unused,
-                         void *                     data)
+cli_schema_on_tree_match(const struct cli_arg * argument __cli_unused,
+                         const struct cli_cmd * command __cli_unused,
+                         const struct cli_dir * directory __cli_unused,
+                         struct cli_context *   context __cli_unused,
+                         int                    argc __cli_unused,
+                         const char * const     argv[] __cli_unused,
+                         void *                 data)
 {
 	((struct cli_schema_work *)data)->format = LYS_OUT_TREE;
 

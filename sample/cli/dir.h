@@ -165,6 +165,17 @@ cli_dir_parse_cmd(const struct cli_dir * directory,
                   int                    argc,
                   const char * const     argv[]);
 
+struct cli_match;
+
+extern void
+cli_dir_complete_cmd(const struct cli_dir * directory,
+                     struct cli_context *   context,
+                     const char *           word,
+                     size_t                 length,
+                     int                    argc,
+                     const char * const     argv[],
+                     struct cli_match *     matches);
+
 extern void
 cli_dir_add_child(struct cli_dir * directory, struct cli_dir * child);
 
