@@ -704,11 +704,162 @@ cli_dir_work_parse_arg(const struct cli_arg * argument,
 	return (ret != -EALREADY) ? ret : 0;
 }
 
+static char *
+cli_dir_make_name_match(const struct cli_dir * directory,
+                        const char *           normalized)
+{
+	cli_dir_assert(directory);
+	cli_assert(!cli_path_isok(normalized));
+
+	const char * delim = cli_dir_has_child(directory) ? "/" : "";
+	char *       name;
+	int          ret;
+
+	if (cli_dir_has_child(directory)) {
+		/* Append a directory component delimiter. */
+		delim = "/";
+		/*
+		 * Prevent readline(3) from appending the completion character
+		 * after the selected match.
+		 */
+		cli_shell_suppress_complete_char();
+	}
+	else
+		delim = "";
+
+	ret = cli_asprintf(&name, "%s%s%s", normalized, directory->name, delim);
+	cli_assert(ret >= 2);
+	cli_assert(name);
+
+	return name;
+}
+
+static void
+cli_dir_generate_matches(const struct cli_dir * directory,
+                         const char *           normalized,
+                         struct cli_match *     matches)
+{
+	cli_dir_assert(directory);
+	cli_assert(!normalized || !cli_path_isok(normalized));
+	cli_match_assert(matches);
+
+	const struct cli_dir * child;
+	const char *           norm = normalized ? normalized : "";
+
+	/*
+	 * Here, we give ownership of newly allocated directory name to
+	 * `matches'.
+	 * Allocated string ownership will be transfered from `matches' to
+	 * readline(3) by cli_shell_complete().
+	 * Readline(3) will free(3) it at completion process termination time.
+	 */
+	cli_dir_foreach_child(directory, child)
+		cli_match_push(matches, cli_dir_make_name_match(child, norm));
+}
+
+static void
+cli_dir_generate_named_matches(const struct cli_dir * directory,
+                               const char *           normalized,
+                               const char *           base_name,
+                               size_t                 base_length,
+                               struct cli_match *     matches)
+{
+	cli_dir_assert(directory);
+	cli_assert(!normalized || !cli_path_isok(normalized));
+	cli_assert(base_name);
+	cli_assert(base_length);
+	cli_match_assert(matches);
+
+	if (!cli_path_comp_isok(base_name, base_length)) {
+		const struct cli_dir * child;
+		const char *           norm = normalized ? normalized : "";
+
+		/*
+		 * Here, we give ownership of newly allocated directory name to
+		 * `matches'.
+		 * Allocated string ownership will be transfered from `matches'
+		 * to readline(3) by cli_shell_complete().
+		 * Readline(3) will free(3) it at completion process termination
+		 * time.
+		 */
+		cli_dir_foreach_child(directory, child) {
+			if (!strncmp(base_name, child->name, base_length))
+				cli_match_push(
+					matches,
+					cli_dir_make_name_match(child, norm));
+		}
+	}
+}
+
+static ssize_t
+cli_dir_searchn_normalize(const struct cli_dir **     directory,
+                          const char *                path,
+                          char **                     normalized,
+                          const struct  cli_context * context)
+{
+	cli_assert(directory);
+	cli_dir_assert(*directory);
+	cli_assert(path);
+	cli_assert(normalized);
+	cli_assert_context(context);
+
+	struct cli_path        pth;
+	int                    ret;
+	char *                 norm;
+	ssize_t                len;
+	const struct cli_dir * dir = *directory;
+
+	cli_path_init(&pth);
+
+	ret = cli_path_parse(&pth, path);
+	if (ret)
+		goto fini;
+
+	norm = cli_malloc(CLI_PATH_MAX);
+	cli_assert(norm);
+
+	if (path[0] != '/')
+		len = cli_path_mkrel(&pth, norm, CLI_PATH_MAX - 1);
+	else
+		len = cli_path_mkabs(&pth, norm, CLI_PATH_MAX - 1);
+
+	cli_assert(len >= 0);
+	cli_assert((len + 1) < CLI_PATH_MAX);
+	if (len) {
+		if (norm[len - 1] != '/') {
+			norm[len++] = '/';
+			norm[len] = '\0';
+		}
+
+		if (norm[0] == '/')
+			dir = &context->root;
+
+		ret = cli_dir_search_from_path(&dir, &pth);
+		if (ret)
+			/* Directory not found: no match. */
+			goto free;
+	}
+
+	cli_path_fini(&pth);
+
+	*directory = dir;
+	*normalized = norm;
+
+	return len;
+
+free:
+	cli_free(norm);
+fini:
+	cli_path_fini(&pth);
+
+	return ret;
+}
+
 static void
 cli_dir_work_complete_arg(const struct cli_arg * argument __cli_unused,
                           const struct cli_cmd * command __cli_unused,
                           const struct cli_dir * directory __cli_unused,
-                          struct cli_context *   context __cli_unused,
+                          struct cli_context *   context,
                           const char *           word,
                           size_t                 length,
                           int                    argc __cli_unused,
@@ -721,39 +872,68 @@ cli_dir_work_complete_arg(const struct cli_arg * argument __cli_unused,
 	cli_assert_context(context);
 	cli_match_assert(matches);
 
-	const struct cli_dir * parent = cli_cwd(context);
-	int                    ret;
-	const struct cli_dir * child;
+	const struct cli_dir * pdir = cli_cwd(context);
 
 	if (length) {
-		FINISH ME!!
-		ret = cli_dir_search(&parent, const char * path)
-		if (ret)
+		/* Base name of requested path. */
+		const char * bname;
+		/* Base name length. */
+		size_t       blen;
+		/* Directory name length of requested path. */
+		ssize_t      dlen;
+		/* Normalized directory name of requested path. */
+		char *       norm = NULL;
+
+		if (length >= CLI_PATH_MAX)
 			return;
-	}
 
-	cli_dir_foreach_child(parent, child) {
-		if (!length || !strncmp(word, child->name, length)) {
-			char * path;
+		/* Compute required base name. */
+		bname = &word[length];
+		while ((bname > word) && (bname[-1] != '/'))
+		       bname--;
+		blen = &word[length] - bname;
+		cli_assert(bname[blen] == '\0');
 
-			if (cli_dir_has_child(child)) {
-				ret = cli_asprintf(&path, "%s/", child->name);
-				cli_assert(ret >= 2);
-			}
-			else
-				path = cli_strdup(child->name);
-			cli_assert(path);
-
+		dlen = (ssize_t)(length - blen);
+		if (dlen) {
 			/*
-			 * Give ownership of `kw' to `matches'. Allocated string
-			 * ownership will be transfered from `matches' to
-			 * readline(3) by cli_shell_complete().
-			 * Readline(3) will free(3) it at completion process
-			 * termination time.
+			 * Compute requested directory name and search for its
+			 * corresponding directory descriptor.
 			 */
-			cli_match_push(matches, path);
+			char * dname;
+
+			dname = cli_malloc(dlen + 1);
+			cli_assert(dname);
+			memcpy(dname, word, dlen);
+			dname[dlen] = '\0';
+
+			dlen = cli_dir_searchn_normalize(&pdir,
+			                                 dname,
+			                                 &norm,
+			                                 context);
+
+			cli_free(dname);
+
+			if (dlen < 0)
+				return;
+
+			cli_assert(norm);
 		}
+
+		if (blen)
+			cli_dir_generate_named_matches(pdir,
+			                               norm,
+			                               bname,
+			                               blen,
+			                               matches);
+		else
+			cli_dir_generate_matches(pdir, norm, matches);
+
+		/* free(3) handles NULL arguments properly... */
+		cli_free(norm);
 	}
+	else
+		cli_dir_generate_matches(pdir, "", matches);
 }
 
 static const struct cli_arg_ops cli_dir_work_arg_ops = {
