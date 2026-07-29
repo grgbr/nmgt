@@ -9,7 +9,7 @@ cli_match_push(struct cli_match * matches, char * string)
 {
 	cli_match_assert(matches);
 	cli_assert(!string || (string[0] != '\0'));
-	cli_assert(!string || (strnlen(string, CLI_ARG_MAX) < CLI_ARG_MAX));
+	cli_assert(!string || (strnlen(string, CLI_MATCH_MAX) < CLI_MATCH_MAX));
 
 	if (matches->cnt >= matches->nr) {
 		unsigned int nr = matches->nr ? matches->nr * 2

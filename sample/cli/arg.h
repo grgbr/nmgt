@@ -4,7 +4,10 @@
 #include "node.h"
 #include <string.h>
 
-#define CLI_ARG_MAX (128U)
+#define CLI_ARG_MAX (512U)
+#if CLI_ARG_MAX > CLI_LINE_MAX
+#error Inconsistent maximum argument and line lengths !
+#endif
 
 struct cli_arg;
 struct cli_cmd;

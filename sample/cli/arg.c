@@ -1,5 +1,5 @@
 #include "arg.h"
-#include "match.h"
+#include "shell.h"
 #include "cmd.h"
 #include "dir.h"
 #include "cli.h"
@@ -358,6 +358,33 @@ cli_arg_parse_kword_parm(const struct cli_arg * argument,
 }
 
 static void
+cli_arg_display_kword_list(char ** matches,
+                           int     count,
+                           int     max_length,
+                           void *  data)
+{
+	cli_arg_assert_kword_parm((const struct cli_arg_kword_parm *)data);
+
+	char **                           list;
+	int                               c;
+	const struct cli_arg_kword_parm * parm =
+		(const struct cli_arg_kword_parm *)data;
+
+	list = cli_malloc((count + 2) * sizeof(list[0]));
+	cli_assert(list);
+
+	for (c = 0; c <= count; c++)
+		list[c] = &matches[c][parm->super.len + 1];
+	list[count + 1] = NULL;
+
+	rl_display_match_list(list,
+	                      count,
+	                      max_length - (parm->super.len + 1));
+
+	cli_free(list);
+}
+
+static void
 cli_arg_complete_kword_term(const struct cli_arg_kword_term * terminal,
                             const struct cli_arg_kword_parm * parameter,
                             const char *                      word,
@@ -434,15 +461,12 @@ cli_arg_complete_kword_parm(const struct cli_arg * argument,
 			cli_shell_suppress_complete_char();
 		}
 	}
-	else if (!memcmp(word, parm->super.name, parm->super.len)) {
+	else if (!memcmp(word, parm->super.name, parm->super.len) &&
+		 (word[parm->super.len] == '=')) {
 		unsigned int t;
 
-		word = &word[parm->super.len];
-		length -= parm->super.len;
-		if (*word == '=') {
-			word++;
-			length--;
-		}
+		word = &word[parm->super.len + 1];
+		length -= parm->super.len + 1;
 
 		for (t = 0; t < parm->nr; t++)
 			cli_arg_complete_kword_term(&parm->terms[t],
@@ -450,6 +474,11 @@ cli_arg_complete_kword_parm(const struct cli_arg * argument,
 			                            word,
 			                            length,
 			                            matches);
+
+		if (cli_match_count(matches))
+			cli_shell_enroll_display_compl(
+				cli_arg_display_kword_list,
+				(void *)parm);
 	}
 }
 

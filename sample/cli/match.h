@@ -16,11 +16,11 @@ struct cli_match {
 	cli_assert((_match)->nr <= CLI_MATCH_MAX); \
 	cli_assert((_match)->cnt <= (_match)->nr)
 
-#define CLI_MATCH_INIT(_match) \
+#define CLI_MATCH_INIT \
 	{ \
-		match->cnt = 0, \
-		match->nr = 0, \
-		match->data = NULL \
+		.cnt = 0, \
+		.nr = 0, \
+		.data = NULL \
 	}
 
 static inline unsigned int

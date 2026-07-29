@@ -1,2 +1,6 @@
 complete directory completion logic
 make shell a pure singleton
+
+fix:
+nmgmt-cli: dir.c:567: cli_dir_work_search: Assertion `work->orig[0] == '/'' failed.  Aborted
+when running "ls ."

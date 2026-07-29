@@ -258,51 +258,56 @@ cli_dir_search_from_path(const struct cli_dir ** directory,
 	cli_dir_assert(*directory);
 	cli_assert(path);
 
-	const struct cli_dir *       dir = *directory;
-	unsigned int                 c;
-	unsigned int                 cnt;
-	const struct cli_path_comp * comp;
+	unsigned int cnt = cli_path_comp_count(path);
 
-	cli_path_foreach_comp(path, c, cnt, comp) {
-		if (cli_path_comp_kind(comp) != CLI_PATH_UPPER_COMP_KIND) {
-			cli_assert(cli_path_comp_kind(comp) ==
-			           CLI_PATH_REG_COMP_KIND);
-			break;
+	if (cnt) {
+		const struct cli_dir *       dir = *directory;
+		unsigned int                 c;
+		const struct cli_path_comp * comp;
+
+TODO: skip first element if it points to current directory !
+
+		cli_path_foreach_comp(path, c, cnt, comp) {
+			if (cli_path_comp_kind(comp) != CLI_PATH_UPPER_COMP_KIND) {
+				cli_assert(cli_path_comp_kind(comp) ==
+				           CLI_PATH_REG_COMP_KIND);
+				break;
+			}
+
+			if (dir->parent)
+				dir = dir->parent;
 		}
 
-		if (dir->parent)
-			dir = dir->parent;
-	}
+		cli_path_foreach_comp_from(path, c, cnt, comp) {
+			/* Iterate over each path component... */
+			const struct cli_dir * child;
+			bool                   found = false;
 
-	cli_path_foreach_comp_from(path, c, cnt, comp) {
-		/* Iterate over each path component... */
-		const struct cli_dir * child;
-		bool                   found = false;
+			/*
+			 * ... and search a child directory which name matches the
+			 * current component.
+			 */
+			cli_dir_foreach_child(dir, child) {
+				if (!cli_path_comp_ncmp(comp,
+				                        child->name,
+				                        strlen(child->name))) {
+					dir = child;
+					found = true;
+					break;
+				}
+			}
 
-		/*
-		 * ... and search a child directory which name matches the
-		 * current component.
-		 */
-		cli_dir_foreach_child(dir, child) {
-			if (!cli_path_comp_ncmp(comp,
-			                        child->name,
-			                        strlen(child->name))) {
-				dir = child;
-				found = true;
-				break;
+			if (!found) {
+				/*
+				 * No matching child directory found: stop the search
+				 * since the given path does not exist.
+				 */
+				return -ENOENT;
 			}
 		}
 
-		if (!found) {
-			/*
-			 * No matching child directory found: stop the search
-			 * since the given path does not exist.
-			 */
-			return -ENOENT;
-		}
+		*directory = dir;
 	}
-
-	*directory = dir;
 
 	return 0;
 }
@@ -562,10 +567,8 @@ cli_dir_work_search(const struct cli_dir_work * work,
 			return ret;
 		}
 	}
-	else if (work->orig) {
+	else if (work->norm[0] == '/') {
 		/* Search for the root directory... */
-		cli_assert(work->orig[0] == '/');
-
 		dir = &context->root;
 	}
 	/* Else: search for the current working directory. */
@@ -704,34 +707,35 @@ cli_dir_work_parse_arg(const struct cli_arg * argument,
 	return (ret != -EALREADY) ? ret : 0;
 }
 
-static char *
-cli_dir_make_name_match(const struct cli_dir * directory,
-                        const char *           normalized)
+static void
+cli_dir_push_match(struct cli_match * matches, const char * dir_name)
 {
-	cli_dir_assert(directory);
-	cli_assert(!cli_path_isok(normalized));
+	cli_match_assert(matches);
+	cli_assert(!cli_path_isok(dir_name));
+	cli_assert(dir_name[0] != '\0');
+	cli_assert(dir_name[strlen(dir_name) - 1] == '/');
 
-	const char * delim = cli_dir_has_child(directory) ? "/" : "";
-	char *       name;
-	int          ret;
+	char * path;
 
-	if (cli_dir_has_child(directory)) {
-		/* Append a directory component delimiter. */
-		delim = "/";
-		/*
-		 * Prevent readline(3) from appending the completion character
-		 * after the selected match.
-		 */
-		cli_shell_suppress_complete_char();
-	}
-	else
-		delim = "";
+	path = cli_strdup(dir_name);
+	cli_assert(path);
 
-	ret = cli_asprintf(&name, "%s%s%s", normalized, directory->name, delim);
+	cli_match_push(matches, path);
+}
+
+static void
+cli_dir_join_push_match(struct cli_match * matches,
+                        const char *       dir_name,
+                        const char *       base_name)
+{
+	char * path;
+	int    ret;
+
+	ret = cli_asprintf(&path, "%s%s/", dir_name, base_name);
 	cli_assert(ret >= 2);
-	cli_assert(name);
+	cli_assert(path);
 
-	return name;
+	cli_match_push(matches, path);
 }
 
 static void
@@ -741,20 +745,30 @@ cli_dir_generate_matches(const struct cli_dir * directory,
 {
 	cli_dir_assert(directory);
 	cli_assert(!normalized || !cli_path_isok(normalized));
+	cli_assert(!normalized || (normalized[0] != '\0'));
+	cli_assert(!normalized || (normalized[strlen(normalized) - 1] == '/'));
 	cli_match_assert(matches);
 
 	const struct cli_dir * child;
-	const char *           norm = normalized ? normalized : "";
 
-	/*
-	 * Here, we give ownership of newly allocated directory name to
-	 * `matches'.
-	 * Allocated string ownership will be transfered from `matches' to
-	 * readline(3) by cli_shell_complete().
-	 * Readline(3) will free(3) it at completion process termination time.
-	 */
-	cli_dir_foreach_child(directory, child)
-		cli_match_push(matches, cli_dir_make_name_match(child, norm));
+	if (cli_dir_has_child(directory)) {
+		/*
+		 * Here, we give ownership of newly allocated directory name to
+		 * `matches'.
+		 * Allocated string ownership will be transfered from `matches'
+		 * to readline(3) by cli_shell_complete().
+		 * Readline(3) will free(3) it at completion process termination
+		 * time.
+		 */
+		cli_dir_foreach_child(directory, child)
+			cli_dir_join_push_match(matches,
+			                        normalized ? normalized : "",
+			                        child->name);
+
+		cli_shell_suppress_complete_char();
+	}
+	else if (normalized)
+		cli_dir_push_match(matches, normalized);
 }
 
 static void
@@ -766,27 +780,54 @@ cli_dir_generate_named_matches(const struct cli_dir * directory,
 {
 	cli_dir_assert(directory);
 	cli_assert(!normalized || !cli_path_isok(normalized));
+	cli_assert(!normalized || (normalized[0] != '\0'));
+	cli_assert(!normalized || (normalized[strlen(normalized) - 1] == '/'));
 	cli_assert(base_name);
 	cli_assert(base_length);
+	cli_assert(base_length < CLI_PATH_NAME_MAX);
+	cli_assert(strnlen(base_name, CLI_PATH_NAME_MAX) == base_length);
 	cli_match_assert(matches);
 
-	if (!cli_path_comp_isok(base_name, base_length)) {
-		const struct cli_dir * child;
-		const char *           norm = normalized ? normalized : "";
+	enum cli_path_comp_kind kind;
 
-		/*
-		 * Here, we give ownership of newly allocated directory name to
-		 * `matches'.
-		 * Allocated string ownership will be transfered from `matches'
-		 * to readline(3) by cli_shell_complete().
-		 * Readline(3) will free(3) it at completion process termination
-		 * time.
-		 */
-		cli_dir_foreach_child(directory, child) {
-			if (!strncmp(base_name, child->name, base_length))
-				cli_match_push(
-					matches,
-					cli_dir_make_name_match(child, norm));
+	if (cli_path_parse_comp(&kind, base_name, base_length + 1) > 0) {
+		if (kind == CLI_PATH_REG_COMP_KIND) {
+			const struct cli_dir * child;
+
+			/*
+			 * Here, we give ownership of newly allocated directory
+			 * name to `matches'.
+			 * Allocated string ownership will be transfered from
+			 * `matches' to readline(3) by cli_shell_complete().
+			 * Readline(3) will free(3) it at completion process
+			 * termination time.
+			 */
+			if (cli_dir_has_child(directory)) {
+				cli_dir_foreach_child(directory, child) {
+					if (!strncmp(base_name,
+					             child->name,
+					             base_length))
+						cli_dir_join_push_match(
+							matches,
+							normalized ? normalized
+							           : "",
+							           child->name);
+				}
+				cli_shell_suppress_complete_char();
+			}
+			else if (normalized)
+				cli_dir_push_match(matches, normalized);
+		}
+		else if (kind == CLI_PATH_UPPER_COMP_KIND) {
+			cli_dir_join_push_match(matches,
+			                        normalized ? normalized : "",
+			                        "..");
+			cli_shell_suppress_complete_char();
+		}
+		else if ((kind == CLI_PATH_CURR_COMP_KIND) && normalized) {
+			cli_dir_push_match(matches, normalized);
+			if (cli_dir_has_child(directory))
+				cli_shell_suppress_complete_char();
 		}
 	}
 }
@@ -838,6 +879,10 @@ cli_dir_searchn_normalize(const struct cli_dir **     directory,
 		if (ret)
 			/* Directory not found: no match. */
 			goto free;
+	}
+	else {
+		cli_free(norm);
+		norm = NULL;
 	}
 
 	cli_path_fini(&pth);
@@ -917,7 +962,7 @@ cli_dir_work_complete_arg(const struct cli_arg * argument __cli_unused,
 			if (dlen < 0)
 				return;
 
-			cli_assert(norm);
+			cli_assert((!dlen && !norm) || (dlen && norm));
 		}
 
 		if (blen)
@@ -933,7 +978,9 @@ cli_dir_work_complete_arg(const struct cli_arg * argument __cli_unused,
 		cli_free(norm);
 	}
 	else
-		cli_dir_generate_matches(pdir, "", matches);
+		cli_dir_generate_matches(pdir, NULL, matches);
+
+	rl_filename_completion_desired = 1;
 }
 
 static const struct cli_arg_ops cli_dir_work_arg_ops = {

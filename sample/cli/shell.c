@@ -6,10 +6,49 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+struct cli_shell {
+	char *                       prompt;
+	char *                       pref;
+	void *                       data;
+	cli_shell_collect_compl_fn * collect_compl;
+	struct cli_match             matches;
+	cli_shell_display_compl_fn * display_compl;
+	void *                       display_data;
+	volatile sig_atomic_t        shutdown;
+	char *                       hpath;
+};
+
+#define cli_shell_assert(_shell) \
+	cli_assert(_shell); \
+	cli_assert((_shell)->prompt); \
+	cli_assert((_shell)->pref); \
+	cli_assert(!(_shell)->collect_compl || (_shell)->display_compl)
+
+/* TODO: make shell a singleton ?? */
+struct cli_shell cli_the_shell;
+
+void
+cli_shell_enroll_display_compl(cli_shell_display_compl_fn * display,
+                               void *                       data)
+{
+	cli_shell_assert(&cli_the_shell);
+	cli_assert(display);
+
+	cli_the_shell.display_compl = display;
+	cli_the_shell.display_data = data;
+}
+
+void
+cli_shell_shutdown(void)
+{
+	cli_shell_assert(&cli_the_shell);
+
+	cli_the_shell.shutdown = 1;
+}
+
 static int
 cli_shell_read_line(const struct cli_shell * shell, char ** line)
 {
-	cli_shell_assert(shell);
 	cli_assert(line);
 
 	char * ln;
@@ -82,16 +121,15 @@ free:
 #endif
 
 int
-cli_shell_read_expr(const struct cli_shell * shell,
-                    struct cli_expr_blk *    expr_block)
+cli_shell_read_expr(struct cli_expr_blk * expr_block)
 {
-	cli_shell_assert(shell);
+	cli_shell_assert(&cli_the_shell);
 	cli_expr_blk_assert(expr_block);
 
 	char * ln;
 	int    ret;
 
-	ret = cli_shell_read_line(shell, &ln);
+	ret = cli_shell_read_line(&cli_the_shell, &ln);
 	if (ret < 0)
 		return ret;
 
@@ -110,29 +148,25 @@ free:
 static void
 _cli_shell_set_prompt(struct cli_shell * shell, const char * prompt)
 {
-	cli_assert(shell);
 	cli_assert(shell->pref);
 	cli_assert(prompt);
 	cli_assert(*prompt);
 
 	int ret;
 
-	ret = cli_asprintf(&shell->prompt,
-	                   "%s%s> ",
-	                   shell->pref,
-	                   prompt);
+	ret = cli_asprintf(&shell->prompt, "%s%s> ", shell->pref, prompt);
 	cli_assert(ret >= 4);
 }
 
 void
-cli_shell_set_prompt(struct cli_shell * shell, const char * prompt)
+cli_shell_set_prompt(const char * prompt)
 {
-	cli_shell_assert(shell);
+	cli_shell_assert(&cli_the_shell);
 	cli_assert(prompt);
 	cli_assert(*prompt);
 
-	cli_free(shell->prompt);
-	_cli_shell_set_prompt(shell, prompt);
+	cli_free(cli_the_shell.prompt);
+	_cli_shell_set_prompt(&cli_the_shell, prompt);
 }
 
 static char *
@@ -142,13 +176,13 @@ cli_shell_init_hist(void)
 	const char * name = program_invocation_short_name;
 	char *       cdir; /* Configuration directory path. */
 	char *       hpath;
-	int          err;
+	int          ret;
 
 	bdir = secure_getenv("XDG_CONFIG_HOME");
 	if (!bdir) {
 		bdir = secure_getenv("HOME");
 		if (!bdir) {
-			err = EINVAL;
+			ret = EINVAL;
 			goto out;
 		}
 
@@ -158,14 +192,17 @@ cli_shell_init_hist(void)
 		cli_asprintf(&cdir, "%s/%s", bdir, name);
 
 	if (mkdir(cdir, S_IRUSR | S_IWUSR)) {
-		cli_assert(errno != EFAULT);
+		cli_assert(ret != EFAULT);
 		if (errno != EEXIST) {
-			err = errno;
+			ret = errno;
 			goto free;
 		}
 	}
 
-	cli_asprintf(&hpath, "%s/history", cdir);
+	ret = cli_asprintf(&hpath, "%s/history", cdir);
+	cli_assert(ret > 0);
+	cli_assert(hpath);
+
 	read_history(hpath);
 	cli_free(cdir);
 
@@ -174,7 +211,7 @@ cli_shell_init_hist(void)
 free:
 	cli_free(cdir);
 out:
-	cli_log("cannot setup history: %s", strerror(err));
+	cli_log("cannot setup history: %s", strerror(ret));
 
 	return NULL;
 }
@@ -182,7 +219,6 @@ out:
 static void
 cli_shell_fini_hist(struct cli_shell * shell)
 {
-	cli_shell_assert(shell);
 	cli_assert(shell->hpath);
 
 	write_history(shell->hpath);
@@ -190,8 +226,36 @@ cli_shell_fini_hist(struct cli_shell * shell)
 	cli_free(shell->hpath);
 }
 
-/* TODO: make shell a singleton ?? */
-static struct cli_shell * cli_the_shell;
+static void
+cli_shell_display_match_list(char ** matches,
+                             int     count,
+                             int     max_length,
+                             void *  data __cli_unused)
+{
+	rl_display_match_list(matches, count, max_length);
+}
+
+static void
+cli_shell_display_match(char ** matches, int count, int max_length)
+{
+	/*
+	 * Do not honor the `rl_completion_query_items' setting for now since
+	 * current readline(3)'s get_y_or_n() implementation is not ready for
+	 * rl_callback_handler_install() / alternate interface support yet
+	 * (as of version 8.3).
+	 * Readline(3) pager logic will still be thrown when the number of
+	 * completion items requires it.
+	 */
+
+	cli_the_shell.display_compl(matches,
+	                            count,
+	                            max_length,
+	                            cli_the_shell.display_data);
+
+	rl_forced_update_display();
+	extern int rl_display_fixed;
+	rl_display_fixed = 1;
+}
 
 static char *
 cli_shell_generate_match(const char * word __cli_unused, int state)
@@ -199,12 +263,13 @@ cli_shell_generate_match(const char * word __cli_unused, int state)
 	cli_assert(word);
 	cli_assert(state >= 0);
 
-	return cli_match_get(&cli_the_shell->matches, state);
+	return cli_match_get(&cli_the_shell.matches, state);
 }
 
 static char **
 cli_shell_complete(const char * word, int begin, int end)
 {
+	cli_shell_assert(&cli_the_shell);
 	cli_assert(word);
 	cli_assert(begin >= 0);
 	cli_assert(end >= 0);
@@ -214,11 +279,14 @@ cli_shell_complete(const char * word, int begin, int end)
 
 	char ** match = NULL;
 
+	/* Restore default completion matches display behavior. */
+	cli_the_shell.display_compl = cli_shell_display_match_list;
+
 	if (((size_t)end < CLI_LINE_MAX) &&
 	    ((size_t)(end - begin) < CLI_ARG_MAX)) {
-		int             first = begin;
-		int             last = begin;
-		struct cli_expr expr;
+		int              first = begin;
+		int              last = begin;
+		struct cli_expr  expr;
 
 		/*
 		 * Probe for the begining of last command within the current
@@ -238,11 +306,10 @@ cli_shell_complete(const char * word, int begin, int end)
 		cli_assert(last <= begin);
 		cli_assert(last >= first);
 
-		cli_match_init(&cli_the_shell->matches);
+		cli_match_init(&cli_the_shell.matches);
 
 		if (last - first) {
 			char * ln;
-
 
 			/*
 			 * ...then duplicate the command up and including the
@@ -256,28 +323,28 @@ cli_shell_complete(const char * word, int begin, int end)
 
 			cli_expr_init(&expr);
 			if (!cli_expr_parse_string(&expr, ln))
-				cli_the_shell->complete(
-					cli_the_shell,
+				cli_the_shell.collect_compl(
+					&cli_the_shell.matches,
 					word,
 					(size_t)(end - begin),
 					cli_expr_arg_cnt(&expr),
 					cli_expr_args(&expr),
-					&cli_the_shell->matches);
+					cli_the_shell.data);
 			cli_expr_fini(&expr);
 
 			cli_free(ln);
 		}
 		else
-			cli_the_shell->complete(cli_the_shell,
-			                        word,
-			                        (size_t)(end - begin),
-			                        0,
-			                        NULL,
-			                        &cli_the_shell->matches);
-		if (cli_match_count(&cli_the_shell->matches))
+			cli_the_shell.collect_compl(&cli_the_shell.matches,
+			                            word,
+			                            (size_t)(end - begin),
+			                            0,
+			                            NULL,
+			                            cli_the_shell.data);
+		if (cli_match_count(&cli_the_shell.matches))
 			match = rl_completion_matches(word,
 			                              cli_shell_generate_match);
-		cli_match_fini(&cli_the_shell->matches);
+		cli_match_fini(&cli_the_shell.matches);
 	}
 
 	/*
@@ -295,40 +362,44 @@ cli_shell_null_complete(const char * word __cli_unused, int len __cli_unused)
 }
 
 static void
-cli_shell_setup_compl(struct cli_shell *      shell,
-                      const char *            word_break_chars,
-                      cli_shell_complete_fn * complete)
+cli_shell_setup_compl(struct cli_shell *           shell,
+                      cli_shell_collect_compl_fn * complete)
 {
 	cli_assert(shell);
-	cli_assert(!complete || word_break_chars);
-	cli_assert(!complete || (word_break_chars[0] != '\0'));
 
 	if (complete) {
-		shell->complete = complete;
-		cli_the_shell = shell;
-
 		/*
 		 * Install our own cli_shell_complete() completion function and
 		 * disable readline's default completion logic.
 		 */
-		rl_basic_word_break_characters = word_break_chars;
-		rl_attempted_completion_function = cli_shell_complete;
 		rl_completion_entry_function = cli_shell_null_complete;
+		shell->collect_compl = complete;
+		rl_attempted_completion_function = cli_shell_complete;
+
+		/*
+		 * In addition install our own completion display function to
+		 * give the command / argument completion logic an opportunity
+		 * to override default readline(3) behavior.
+		 */
+		shell->display_compl = cli_shell_display_match_list;
+		rl_completion_display_matches_hook = cli_shell_display_match;
+
+		/* Enable completion. */
 		rl_inhibit_completion = 0;
 	}
 	else
+		/* Disable completion entirely. */
 		rl_inhibit_completion = 1;
 }
 
 int
-cli_shell_init(struct cli_shell *      shell,
-               bool                    history,
-               const char *            word_break_chars,
-               cli_shell_complete_fn * complete)
+cli_shell_init(bool                         history,
+               const char *                 break_chars,
+               cli_shell_collect_compl_fn * complete,
+               void *                       data)
+
 {
-	cli_assert(shell);
-	cli_assert(!complete || word_break_chars);
-	cli_assert(!complete || (word_break_chars[0] != '\0'));
+	cli_assert(!break_chars || (break_chars[0] != '\0'));
 
 	const char * user;
 	char *       host;
@@ -345,19 +416,24 @@ cli_shell_init(struct cli_shell *      shell,
 	ret = gethostname(host, HOST_NAME_MAX + 1);
 	cli_assert(!ret);
 
-	ret = cli_asprintf(&shell->pref, "%s@%s:", user, host);
+	ret = cli_asprintf(&cli_the_shell.pref, "%s@%s:", user, host);
 	cli_assert(ret >= 4);
 
 	cli_free(host);
 
-	_cli_shell_set_prompt(shell, "/");
-	shell->hpath = NULL;
-	shell->shutdown = 0;
+	_cli_shell_set_prompt(&cli_the_shell, "/");
+	cli_the_shell.hpath = NULL;
+	cli_the_shell.shutdown = 0;
 
-	cli_shell_setup_compl(shell, word_break_chars, complete);
+	/* Setup the list of characters that signal a break between words. */
+	if (break_chars)
+		rl_basic_word_break_characters = break_chars;
+	
+	cli_shell_setup_compl(&cli_the_shell, complete);
+	cli_the_shell.data = data;
 
 	if (history)
-		shell->hpath = cli_shell_init_hist();
+		cli_the_shell.hpath = cli_shell_init_hist();
 
 	rl_readline_name = program_invocation_short_name;
 
@@ -365,11 +441,13 @@ cli_shell_init(struct cli_shell *      shell,
 }
 
 void
-cli_shell_fini(struct cli_shell * shell)
+cli_shell_fini(void)
 {
-	if (shell->hpath)
-		cli_shell_fini_hist(shell);
+	cli_shell_assert(&cli_the_shell);
 
-	cli_free(shell->pref);
-	cli_free(shell->prompt);
+	if (cli_the_shell.hpath)
+		cli_shell_fini_hist(&cli_the_shell);
+
+	cli_free(cli_the_shell.pref);
+	cli_free(cli_the_shell.prompt);
 }

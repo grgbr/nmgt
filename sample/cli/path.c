@@ -349,7 +349,7 @@ cli_path_skip_delim(const char * string, size_t size)
 	return (size_t)(str - string);
 }
 
-static ssize_t
+ssize_t
 cli_path_parse_comp(enum cli_path_comp_kind * kind,
                     const char *              string,
                     size_t                    size)
@@ -429,6 +429,22 @@ cli_push_upper_comp_tail(struct cli_path * path,
 	}
 }
 
+static void
+cli_push_curr_comp_tail(struct cli_path * path,
+                        const char *      string,
+                        size_t            length,
+                        bool              abspath)
+{
+	if (!abspath && !path->cnt) {
+		/*
+		 * We are parsing the first component of a relative
+		 * path.
+		 * Push the "current directory" as first path component.
+		 */
+		cli_path_push_tail(path, string, length);
+	}
+}
+
 static int
 _cli_path_parse(struct cli_path * path,
                 const char *      string,
@@ -464,8 +480,10 @@ _cli_path_parse(struct cli_path * path,
 
 		case CLI_PATH_UPPER_COMP_KIND:
 			cli_push_upper_comp_tail(path, str, len, abspath);
+			break;
 
 		case CLI_PATH_CURR_COMP_KIND:
+			cli_push_curr_comp_tail(path, str, len, abspath);
 			break;
 
 		default:

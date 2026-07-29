@@ -28,7 +28,6 @@ struct cli_context {
 	struct ly_out *        lyout;
 	bool                   isatty;
 	bool                   interact;
-	struct cli_shell       shell;
 };
 
 #define cli_assert_context(_ctx) \

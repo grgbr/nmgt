@@ -14,18 +14,19 @@
  * Utilities
  ******************************************************************************/
 
+#warning TODO: plug in a SIGWINCH signal handler
+
 unsigned int
-cli_term_cols(const struct cli_context * context)
+cli_term_cols(const struct cli_context * context __cli_unused)
 {
 	cli_assert_context(context);
 
-	struct winsize wsz;
+	int cols;
 
-#warning TODO: plug in a SIGWINCH signal handler instead
-	if (context->isatty && !ioctl(STDOUT_FILENO, TIOCGWINSZ, &wsz))
-		return (unsigned int)wsz.ws_col;
-	else
-		return 0;
+	rl_get_screen_size(NULL, &cols);
+	cli_assert(cols > 0);
+
+	return cols;
 }
 
 /******************************************************************************
@@ -89,7 +90,7 @@ cli_chdir(struct cli_context * context, const struct cli_dir * directory)
 		len = cli_dir_mkabs(directory, path,  CLI_PATH_MAX);
 		cli_assert(len > 0);
 
-		cli_shell_set_prompt(&context->shell, path);
+		cli_shell_set_prompt(path);
 
 		cli_free(path);
 	}
@@ -145,24 +146,21 @@ cli_parse_expr_blk(struct cli_context *        context,
 }
 
 static void
-cli_complete(struct cli_shell * shell,
+cli_complete(struct cli_match * matches,
              const char *       word,
              size_t             length,
              int                argc,
              const char * const argv[],
-             struct cli_match * matches)
+             void *             data)
 {
-	cli_shell_assert(shell);
+	cli_assert(matches);
 	cli_assert(word);
 	cli_assert(length < CLI_ARG_MAX);
 	cli_assert(strnlen(word, CLI_ARG_MAX) == length);
 	cli_assert(argc >= 0);
 	cli_assert(!argc || argv);
-	cli_assert(matches);
 
-	struct cli_context * ctx = cli_containerof(shell,
-	                                           struct cli_context,
-	                                           shell);
+	struct cli_context * ctx = data;
 
 	cli_dir_complete_cmd(ctx->cwd,
 	                     ctx,
@@ -502,7 +500,7 @@ main(int argc, const char * const argv[])
 			/* Cannot run in interactive mode... */
 			goto fini;
 
-		ret = cli_shell_init(&ctx.shell, true, " \t;\n", cli_complete);
+		ret = cli_shell_init(true, " \t;\n", cli_complete, &ctx);
 		if (ret)
 			goto fini_shell;
 
@@ -511,7 +509,7 @@ main(int argc, const char * const argv[])
 		do {
 			struct cli_expr_blk eblk = CLI_EXPR_BLK_INIT(eblk);
 
-			ret = cli_shell_read_expr(&ctx.shell, &eblk);
+			ret = cli_shell_read_expr(&eblk);
 			cli_assert(ret <= 0);
 			switch (ret) {
 			case 0:
@@ -545,7 +543,7 @@ main(int argc, const char * const argv[])
 			ret = 0;
 
 fini_shell:
-		cli_shell_fini(&ctx.shell);
+		cli_shell_fini();
 	}
 	else {
 		ret = cli_parse(&ctx, argc - 1, &argv[1]);

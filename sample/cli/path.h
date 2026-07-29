@@ -1,19 +1,18 @@
 #ifndef _CLI_PATH_H
 #define _CLI_PATH_H
 
-#include "common.h"
+#include "arg.h"
+
+#define CLI_PATH_MAX \
+	CLI_ARG_MAX
 
 #define CLI_PATH_NAME_MAX (128)
 #if CLI_PATH_NAME_MAX <= 64
 #error Path name length MUST conform to section 6.2 of RFC 7950 !
 #endif
-
-#define CLI_PATH_MAX (512)
-#if CLI_PATH_MAX > CLI_LINE_MAX
-/* The user would not be able to enter such a long path anymay... */
-#undef CLI_PATH_MAX
-#define CLI_PATH_MAX CLI_LINE_MAX
-#endif
+#if CLI_PATH_MAX <= CLI_PATH_NAME_MAX
+#error Maximum path length not large enough !
+#endif /* CLI_PATH_MAX <= CLI_PATH_NAME_MAX */
 
 struct cli_path_comp {
 	const char * str;
@@ -128,6 +127,11 @@ extern void
 cli_path_push_tail(struct cli_path * path,
                    const char *      component,
                    size_t            length);
+
+extern ssize_t
+cli_path_parse_comp(enum cli_path_comp_kind * kind,
+                    const char *              string,
+                    size_t                    size);
 
 extern int
 cli_path_parse(struct cli_path * path, const char * string);
