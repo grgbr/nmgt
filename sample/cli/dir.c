@@ -258,56 +258,52 @@ cli_dir_search_from_path(const struct cli_dir ** directory,
 	cli_dir_assert(*directory);
 	cli_assert(path);
 
-	unsigned int cnt = cli_path_comp_count(path);
+	const struct cli_dir *       dir = *directory;
+	unsigned int                 c;
+	unsigned int                 cnt;
+	const struct cli_path_comp * comp;
 
-	if (cnt) {
-		const struct cli_dir *       dir = *directory;
-		unsigned int                 c;
-		const struct cli_path_comp * comp;
+	cli_path_foreach_comp(path, c, cnt, comp) {
+		if (cli_path_comp_kind(comp) !=
+		    CLI_PATH_UPPER_COMP_KIND) {
+			cli_assert(cli_path_comp_kind(comp) ==
+			           CLI_PATH_REG_COMP_KIND);
+			break;
+		}
 
-TODO: skip first element if it points to current directory !
+		if (dir->parent)
+			dir = dir->parent;
+	}
 
-		cli_path_foreach_comp(path, c, cnt, comp) {
-			if (cli_path_comp_kind(comp) != CLI_PATH_UPPER_COMP_KIND) {
-				cli_assert(cli_path_comp_kind(comp) ==
-				           CLI_PATH_REG_COMP_KIND);
+	cli_path_foreach_comp_from(path, c, cnt, comp) {
+		/* Iterate over each path component... */
+		const struct cli_dir * child;
+		bool                   found = false;
+
+		/*
+		 * ...and search a child directory which name matches
+		 * the current component.
+		 */
+		cli_dir_foreach_child(dir, child) {
+			if (!cli_path_comp_ncmp(comp,
+			                        child->name,
+			                        strlen(child->name))) {
+				dir = child;
+				found = true;
 				break;
 			}
-
-			if (dir->parent)
-				dir = dir->parent;
 		}
 
-		cli_path_foreach_comp_from(path, c, cnt, comp) {
-			/* Iterate over each path component... */
-			const struct cli_dir * child;
-			bool                   found = false;
-
+		if (!found) {
 			/*
-			 * ... and search a child directory which name matches the
-			 * current component.
+			 * No matching child directory found: stop the
+			 * search since the given path does not exist.
 			 */
-			cli_dir_foreach_child(dir, child) {
-				if (!cli_path_comp_ncmp(comp,
-				                        child->name,
-				                        strlen(child->name))) {
-					dir = child;
-					found = true;
-					break;
-				}
-			}
-
-			if (!found) {
-				/*
-				 * No matching child directory found: stop the search
-				 * since the given path does not exist.
-				 */
-				return -ENOENT;
-			}
+			return -ENOENT;
 		}
-
-		*directory = dir;
 	}
+
+	*directory = dir;
 
 	return 0;
 }
@@ -818,16 +814,11 @@ cli_dir_generate_named_matches(const struct cli_dir * directory,
 			else if (normalized)
 				cli_dir_push_match(matches, normalized);
 		}
-		else if (kind == CLI_PATH_UPPER_COMP_KIND) {
+		else {
 			cli_dir_join_push_match(matches,
 			                        normalized ? normalized : "",
 			                        "..");
 			cli_shell_suppress_complete_char();
-		}
-		else if ((kind == CLI_PATH_CURR_COMP_KIND) && normalized) {
-			cli_dir_push_match(matches, normalized);
-			if (cli_dir_has_child(directory))
-				cli_shell_suppress_complete_char();
 		}
 	}
 }

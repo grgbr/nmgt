@@ -19,7 +19,6 @@ struct cli_shell {
 };
 
 #define cli_shell_assert(_shell) \
-	cli_assert(_shell); \
 	cli_assert((_shell)->prompt); \
 	cli_assert((_shell)->pref); \
 	cli_assert(!(_shell)->collect_compl || (_shell)->display_compl)

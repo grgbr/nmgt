@@ -429,22 +429,6 @@ cli_push_upper_comp_tail(struct cli_path * path,
 	}
 }
 
-static void
-cli_push_curr_comp_tail(struct cli_path * path,
-                        const char *      string,
-                        size_t            length,
-                        bool              abspath)
-{
-	if (!abspath && !path->cnt) {
-		/*
-		 * We are parsing the first component of a relative
-		 * path.
-		 * Push the "current directory" as first path component.
-		 */
-		cli_path_push_tail(path, string, length);
-	}
-}
-
 static int
 _cli_path_parse(struct cli_path * path,
                 const char *      string,
@@ -483,7 +467,6 @@ _cli_path_parse(struct cli_path * path,
 			break;
 
 		case CLI_PATH_CURR_COMP_KIND:
-			cli_push_curr_comp_tail(path, str, len, abspath);
 			break;
 
 		default:
