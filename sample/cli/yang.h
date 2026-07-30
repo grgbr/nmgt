@@ -228,6 +228,12 @@ cli_lyd_load(const struct cli_context * context,
              unsigned int               depth,
              sr_data_t **               data);
 
+extern int
+cli_lyd_load_from_node(const struct cli_context * context,
+                       const struct lysc_node *   node,
+                       unsigned int               depth,
+                       sr_data_t **               data);
+
 static inline void
 cli_lyd_unload(sr_data_t * data)
 {

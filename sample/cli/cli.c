@@ -2,6 +2,7 @@
 #include "expr.h"
 #include "yang.h"
 #include "list.h"
+#include "build.h"
 #include "cd.h"
 #include "pwd.h"
 #include "find.h"
@@ -355,70 +356,6 @@ cli_fini_context(struct cli_context * context)
  * Top-level logic
  ******************************************************************************/
 
-struct cli_tree_builder {
-	struct cli_dir * parent;
-};
-
-static int
-cli_build_tree_dir(struct cli_context * context,
-                   struct lysc_node *   node,
-                   enum cli_walk_event  event,
-                   void *               data)
-{
-	cli_assert_context(context);
-	cli_assert(node);
-	cli_assert((event == CLI_WALK_PRE_EVT) || (event == CLI_WALK_POST_EVT));
-
-	struct cli_tree_builder * build = data;
-
-	cli_assert(build);
-	cli_assert(build->parent);
-
-	switch (node->nodetype) {
-	case LYS_CONTAINER:
-	case LYS_LIST:
-		if (event == CLI_WALK_PRE_EVT) {
-			struct cli_dir * dir;
-
-			dir = cli_dir_create_node(node->name, node);
-			if (!dir) {
-				char * xpath;
-
-				xpath = cli_lysc_node_xpath(node);
-				cli_log("'%s': "
-				        "cannot create node directory entry.",
-				        xpath);
-				cli_free(xpath);
-
-				return -ENAMETOOLONG;
-			}
-
-			cli_dir_add_child(build->parent, dir);
-
-			build->parent = dir;
-		}
-		else if (event == CLI_WALK_POST_EVT)
-			build->parent = build->parent->parent;
-
-		break;
-
-	default:
-#if defined(CONFIG_CLI_DEBUG)
-		if (event == CLI_WALK_PRE_EVT) {
-			char * xpath;
-
-			xpath = cli_lysc_node_xpath(node);
-			cli_log("'%s': %s support not implemented !",
-			        xpath,
-			        cli_ly_nodetype_str(node->nodetype));
-			cli_free(xpath);
-		}
-#endif /* defined(CONFIG_CLI_DEBUG) */
-	}
-
-	return CLI_WALK_CONT_RET;
-}
-
 static int
 cli_init(struct cli_context * context)
 {
@@ -427,7 +364,6 @@ cli_init(struct cli_context * context)
 	int                       ret;
 	unsigned int              m;
 	const struct lys_module * mod;
-	struct cli_tree_builder   build;
 
 	ret = cli_init_context(context);
 	if (ret)
@@ -442,7 +378,8 @@ cli_init(struct cli_context * context)
 	cli_quit_build_cmd(&context->root);
 
 	cli_lys_foreach_module(context, m, mod) {
-		struct cli_dir * dir;
+		struct cli_dir *      dir;
+		struct cli_tree_build build;
 
 		dir = cli_dir_create_module(mod->name, mod);
 		if (!dir) {
@@ -459,7 +396,7 @@ cli_init(struct cli_context * context)
 
 		cli_dir_add_child(&context->root, dir);
 
-		build.parent = dir;
+		cli_build_setup(&build, dir);
 		ret = cli_lys_walk_module(context,
 		                          mod,
 		                          cli_build_tree_dir,

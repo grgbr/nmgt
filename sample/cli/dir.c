@@ -342,6 +342,24 @@ fini:
 	return ret;
 }
 
+struct cli_cmd *
+cli_dir_find_cmd(const struct cli_dir * directory, const char * name)
+{
+	cli_dir_assert(directory);
+	cli_assert(name);
+	cli_assert(name[0]);
+	cli_assert(strnlen(name, CLI_ARG_MAX) < CLI_ARG_MAX);
+
+	struct cli_node * cmd;
+
+	cli_node_foreach_sibling((struct cli_node *)directory->cmds, cmd) {
+		if (!strcmp(name, ((const struct cli_cmd *)cmd)->name))
+			return (struct cli_cmd *)cmd;
+	}
+
+	return NULL;
+}
+
 int
 cli_dir_parse_cmd(const struct cli_dir * directory,
                   struct cli_context *   context,

@@ -159,6 +159,9 @@ cli_dir_search_from_path(const struct cli_dir ** directory,
 extern int
 cli_dir_search(const struct cli_dir ** directory, const char * path);
 
+extern struct cli_cmd *
+cli_dir_find_cmd(const struct cli_dir * directory, const char * name);
+
 extern int
 cli_dir_parse_cmd(const struct cli_dir * directory,
                   struct cli_context *   context,

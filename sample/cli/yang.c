@@ -312,3 +312,22 @@ cli_lyd_load(const struct cli_context * context,
 
 	return SR_ERR_OK;
 }
+
+int
+cli_lyd_load_from_node(const struct cli_context * context,
+                       const struct lysc_node *   node,
+                       unsigned int               depth,
+                       sr_data_t **               data)
+{
+	char * xpath;
+	int    ret;
+
+	xpath = cli_lysc_node_xpath(node);
+	cli_assert(xpath);
+
+	ret = cli_lyd_load(context, xpath, depth, data);
+
+	cli_free(xpath);
+
+	return ret;
+}
