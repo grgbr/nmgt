@@ -24,8 +24,9 @@ cli_match_push(struct cli_match * matches, char * string)
 
 		matches->data = cli_realloc(matches->data,
 		                            nr * sizeof(matches->data[0]));
-		matches->nr = nr;
 		cli_assert(matches->data);
+
+		matches->nr = nr;
 	}
 
 	matches->data[matches->cnt++] = string;

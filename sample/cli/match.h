@@ -9,6 +9,10 @@ struct cli_match {
 	char **      data;
 };
 
+/*
+ * TODO: make sure CLI_MATCH_MAX is consistent with `rl_completion_query_items'
+ *       if used.
+ */
 #define CLI_MATCH_MAX (1024U)
 
 #define cli_match_assert(_match) \

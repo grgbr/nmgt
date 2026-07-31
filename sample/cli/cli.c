@@ -18,16 +18,20 @@
 #warning TODO: plug in a SIGWINCH signal handler
 
 unsigned int
-cli_term_cols(const struct cli_context * context __cli_unused)
+cli_term_cols(const struct cli_context * context)
 {
 	cli_assert_context(context);
 
-	int cols;
+	if (context->isatty) {
+		int cols;
 
-	rl_get_screen_size(NULL, &cols);
-	cli_assert(cols > 0);
+		rl_get_screen_size(NULL, &cols);
+		cli_assert(cols > 0);
 
-	return cols;
+		return cols;
+	}
+	else
+		return 0;
 }
 
 /******************************************************************************
@@ -314,6 +318,7 @@ cli_init_context(struct cli_context * context)
 	cli_dir_init_root(&context->root);
 	context->cwd = &context->root;
 	context->isatty = !!isatty(STDOUT_FILENO);
+	context->colored = !!context->isatty;
 	context->interact = false;
 
 	return SR_ERR_OK;

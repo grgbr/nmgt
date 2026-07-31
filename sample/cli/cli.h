@@ -27,6 +27,7 @@ struct cli_context {
 	const struct cli_dir * cwd;
 	struct ly_out *        lyout;
 	bool                   isatty;
+	bool                   colored;
 	bool                   interact;
 };
 
@@ -41,6 +42,30 @@ struct cli_context {
 
 extern unsigned int
 cli_term_cols(const struct cli_context * context);
+
+static inline bool
+cli_isatty(const struct cli_context * context)
+{
+	cli_assert_context(context);
+
+	return context->isatty;
+}
+
+static inline bool
+cli_has_colors(const struct cli_context * context)
+{
+	cli_assert_context(context);
+
+	return context->colored;
+}
+
+static inline bool
+cli_isinteractive(const struct cli_context * context)
+{
+	cli_assert_context(context);
+
+	return context->interact;
+}
 
 static inline const struct cli_dir *
 cli_cwd(const struct cli_context * context)
