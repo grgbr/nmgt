@@ -116,8 +116,8 @@ cli_lys_walk_module(struct cli_context *      context,
 	cli_assert(module->compiled);
 	cli_assert(visit);
 
-	struct lysc_node * root;
-	int                ret = 0;
+	const struct lysc_node * root;
+	int                      ret = 0;
 
 	/*
 	 * Iterate over schema nodes only, i.e., not actions / rpcs, neither
@@ -165,41 +165,12 @@ cli_lysc_node_xpath(const struct lysc_node * node)
 	return xpath;
 }
 
-static struct lysc_node *
-cli_lysc_child(const struct lysc_node * node)
-{
-	cli_assert(node);
-
-	if (!(node->nodetype & (LYS_RPC | LYS_ACTION))) {
-		switch (node->nodetype) {
-		case LYS_CONTAINER:
-			return ((struct lysc_node_container *)node)->child;
-		case LYS_CHOICE:
-			return (struct lysc_node *)
-			((struct lysc_node_choice *)node)->cases;
-		case LYS_CASE:
-			return ((struct lysc_node_case *)node)->child;
-		case LYS_LIST:
-			return ((struct lysc_node_list *)node)->child;
-		case LYS_INPUT:
-		case LYS_OUTPUT:
-			return ((struct lysc_node_action_inout *)node)->child;
-		case LYS_NOTIF:
-			return ((struct lysc_node_notif *)node)->child;
-		default:
-			return NULL;
-		}
-	}
-	else
-		return &((struct lysc_node_action *)node)->input.node;
-}
-
 #warning Remove recursion
 int
-cli_lysc_walk_node(struct cli_context * context,
-                   struct lysc_node *   node,
-                   cli_lysc_visit_fn *  visit,
-                   void *               data)
+cli_lysc_walk_node(struct cli_context *     context,
+                   const struct lysc_node * node,
+                   cli_lysc_visit_fn *      visit,
+                   void *                   data)
 {
 	cli_assert_context(context);
 	cli_assert(node);
@@ -209,7 +180,7 @@ cli_lysc_walk_node(struct cli_context * context,
 
 	ret = visit(context, node, CLI_WALK_PRE_EVT, data);
 	if (ret == CLI_WALK_CONT_RET) {
-		struct lysc_node * child;
+		const struct lysc_node * child;
 
 		LY_LIST_FOR(cli_lysc_child(node), child) {
 			ret = cli_lysc_walk_node(context, child, visit, data);
@@ -283,10 +254,12 @@ int
 cli_lyd_load(const struct cli_context * context,
              const char *               xpath,
              unsigned int               depth,
+             sr_get_oper_flag_t         flags,
              sr_data_t **               data)
 {
 	cli_assert_context(context);
 	cli_assert(xpath);
+	cli_assert(xpath[0]);
 	cli_assert(strnlen(xpath, CLI_XPATH_MAX) < CLI_XPATH_MAX);
 	cli_assert(data);
 
@@ -296,7 +269,7 @@ cli_lyd_load(const struct cli_context * context,
 	                  xpath,
 	                  depth,
 	                  0,
-	                  SR_OPER_DEFAULT,
+	                  flags,
 	                  data);
 	if (err != SR_ERR_OK)
 		return err;
@@ -314,18 +287,74 @@ cli_lyd_load(const struct cli_context * context,
 }
 
 int
-cli_lyd_load_from_node(const struct cli_context * context,
-                       const struct lysc_node *   node,
-                       unsigned int               depth,
-                       sr_data_t **               data)
+cli_lyd_load_from_schema(const struct cli_context * context,
+                         const struct lysc_node *   node,
+                         unsigned int               depth,
+                         sr_get_oper_flag_t         flags,
+                         sr_data_t **               data)
 {
+	cli_assert_context(context);
+	cli_assert(node);
+	cli_assert(data);
+
 	char * xpath;
 	int    ret;
 
 	xpath = cli_lysc_node_xpath(node);
 	cli_assert(xpath);
 
-	ret = cli_lyd_load(context, xpath, depth, data);
+	ret = cli_lyd_load(context, xpath, depth, flags, data);
+
+	cli_free(xpath);
+
+	return ret;
+}
+
+int
+cli_lyd_load_node(const struct cli_context * context,
+                  const char *               xpath,
+                  sr_data_t **               data)
+{
+	cli_assert_context(context);
+	cli_assert(xpath);
+	cli_assert(xpath[0]);
+	cli_assert(strnlen(xpath, CLI_XPATH_MAX) < CLI_XPATH_MAX);
+	cli_assert(data);
+
+	int err;
+
+	err = sr_get_node(context->sess, xpath, 0, data);
+	if (err != SR_ERR_OK)
+		return err;
+
+	if (!*data)
+		return SR_ERR_NOT_FOUND;
+
+	if (!(*data)->tree) {
+		sr_release_data(*data);
+		*data = NULL;
+		return SR_ERR_NOT_FOUND;
+	}
+
+	return SR_ERR_OK;
+}
+
+int
+cli_lyd_load_node_from_schema(const struct cli_context * context,
+                              const struct lysc_node *   node,
+                              sr_data_t **               data)
+{
+	cli_assert_context(context);
+	cli_assert(node);
+	cli_assert(data);
+
+	char * xpath;
+	int    ret;
+
+	xpath = cli_lysc_node_xpath(node);
+	cli_assert(xpath);
+
+	ret = cli_lyd_load_node(context, xpath, data);
 
 	cli_free(xpath);
 

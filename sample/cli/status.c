@@ -1,6 +1,75 @@
 #include "status.h"
+#include "lyd_table.h"
 #include "yang.h"
 #include "cmd.h"
+
+struct cli_status_cmd {
+	struct cli_cmd         super;
+	struct cli_lyd_table * table;
+};
+
+static int
+cli_status_show_table(const struct cli_cmd *     command,
+                      const struct cli_context * context)
+{
+	cli_cmd_assert(command);
+	cli_lyd_table_assert(((struct cli_status_cmd *)command)->table);
+	cli_assert_context(context);
+
+	struct cli_status_cmd * cmd = (struct cli_status_cmd *)command;
+	int                     ret;
+
+	ret = cli_table_load((struct cli_table *)cmd->table, context, NULL);
+	if (ret) {
+		cli_cmd_log(command, "cannot load: %s.", sr_strerror(ret));
+		return -ENOMSG;
+	}
+
+	ret = cli_table_show((struct cli_table *)cmd->table, false, stdout);
+	if (ret) {
+		cli_cmd_log(command, "cannot show: %s.", strerror(-ret));
+		return -ENOMSG;
+	}
+
+	return 0;
+}
+
+static int
+cli_status_show_json(const struct cli_cmd *     command,
+                     const struct lysc_node *   schema,
+                     const struct cli_context * context)
+{
+	sr_data_t * data;
+	int         ret;
+
+	ret = cli_lyd_load_from_schema(context,
+	                               schema,
+	                               2,
+	                               SR_OPER_NO_CONFIG,
+	                               &data);
+	if (ret) {
+		cli_cmd_log(command, "cannot load: %s.", sr_strerror(ret));
+		return -ENOMSG;
+	}
+
+	ret = lyd_print_all(context->lyout,
+	                    data->tree,
+	                    LYD_JSON,
+	                    LYD_PRINT_WD_ALL_TAG);
+	if (ret) {
+		cli_cmd_log(command, "cannot show: %s.", ly_strerr(ret));
+		ret = -EBADR;
+	}
+
+	cli_lyd_unload(data);
+
+	return -EBADR;
+}
+
+/******************************************************************************
+ * `status' command handling.
+ * Print state data related to the directory node given in argument.
+ ******************************************************************************/
 
 enum cli_data_format {
     CLI_TABLE_DATA_FMT = 0,
@@ -8,11 +77,6 @@ enum cli_data_format {
     CLI_XML_DATA_FMT,
     CLI_DATA_FMT_NR
 };
-
-/******************************************************************************
- * `status' command handling.
- * Print state data related to the directory node given in argument.
- ******************************************************************************/
 
 struct cli_status_work {
 	struct cli_dir_work  super;
@@ -40,27 +104,23 @@ cli_status_exec_work(struct cli_work * work, struct cli_context * context)
 	 * Given the directory descriptor found above, display its state related
 	 * informations.
 	 */
-	sr_data_t * data;
-	ret = cli_lyd_load_from_node(context, dir->sch_node, 2, &data);
-	if (ret) {
-		cli_cmd_log(wk->super.cmd,
-		            "cannot load: %s.",
-		            sr_strerror(ret));
-		return -ENOMSG;
+	switch (wk->format) {
+	case CLI_TABLE_DATA_FMT:
+		ret = cli_status_show_table(wk->super.cmd, context);
+		break;
+
+	case CLI_JSON_DATA_FMT:
+		ret = cli_status_show_json(wk->super.cmd,
+		                           dir->sch_node,
+		                           context);
+		break;
+
+	case CLI_XML_DATA_FMT:
+	default:
+		cli_assert(0);
 	}
 
-	ret = lyd_print_all(context->lyout,
-	                    data->tree,
-	                    LYD_JSON,
-	                    LYD_PRINT_WD_ALL_TAG);
-	if (ret) {
-		cli_cmd_log(wk->super.cmd, "cannot show: %s.", ly_strerr(ret));
-		ret = -EBADR;
-	}
-
-	cli_lyd_unload(data);
-
-	return 0;
+	return ret;
 }
 
 static const struct cli_work_ops cli_status_work_ops = {
@@ -107,9 +167,19 @@ destroy:
 	return ret;
 }
 
+static void
+cli_status_fini_cmd(struct cli_cmd * command)
+{
+	struct cli_lyd_table * tbl = ((struct cli_status_cmd *)command)->table;
+
+	cli_lyd_table_fini(tbl);
+	cli_free(tbl);
+}
+
 static const struct cli_cmd_ops cli_status_cmd_ops = {
 	.parse    = cli_status_parse_cmd,
-	.complete = cli_cmd_complete_args
+	.complete = cli_cmd_complete_args,
+	.fini     = cli_status_fini_cmd
 };
 
 static int
@@ -160,13 +230,27 @@ static const struct cli_arg_kword_term cli_status_format_terms[] = {
 	CLI_ARG_KWORD_TERM("xml",   cli_status_on_xml_match),
 };
 
-static struct cli_cmd *
-cli_status_create_cmd(struct cli_dir * directory)
+static bool
+cli_status_filter_node(const struct lysc_node * node)
+{
+	cli_assert(node);
+	cli_assert(node->nodetype == LYS_LEAF);
+
+	return (cli_lysc_conf_flags(node) == LYS_CONFIG_R) &&
+	       !(cli_lysc_status_flags(node) & LYS_STATUS_DEPRC);
+}
+
+static struct cli_status_cmd *
+cli_status_create_cmd(struct cli_dir *           directory,
+                      const struct cli_context * context)
 {
 	cli_dir_assert(directory);
 	cli_assert(cli_dir_type(directory) == CLI_DIR_NODE_TYPE);
+	cli_assert_context(context);
 
-	struct cli_cmd *            cmd;
+	struct cli_status_cmd *     cmd;
+	struct cli_lyd_table *      tbl;
+	int                         err;
 	struct cli_arg *            choice;
 	struct cli_arg_kword_parm * fmt;
 
@@ -175,7 +259,23 @@ cli_status_create_cmd(struct cli_dir * directory)
 	 * with the "status" name argument.
 	 */
 	cli_assert(sizeof("status") <= CLI_ARG_MAX);
-	cli_cmd_createn_add(&cmd, "status", &cli_status_cmd_ops, directory);
+	cli_cmd_sized_create((struct cli_cmd **)&cmd,
+	                     sizeof(*cmd),
+	                     "status",
+	                     &cli_status_cmd_ops);
+
+	/*
+	 * Cannot fail since calling cli_status_make_cmd() previously made sure
+	 * that there is at least one candidate leaf for the directory given in
+	 * argument.
+	 */
+	tbl = cli_malloc(sizeof(*tbl));
+	err = cli_lyd_table_init(tbl,
+	                         directory->sch_node,
+	                         cli_status_filter_node,
+	                         context);
+	cli_assert(!err);
+	cmd->table = tbl;
 
 	/* Cannot fail. */
 	choice = cli_arg_createn_add_choice((struct cli_node *)cmd);
@@ -192,22 +292,35 @@ cli_status_create_cmd(struct cli_dir * directory)
 	                               cli_array_nr(cli_status_format_terms),
 	                               (struct cli_node *)choice);
 
+	cli_dir_add_cmd(directory, &cmd->super);
+
 	return cmd;
 }
 
 struct cli_cmd *
-cli_status_make_cmd(struct cli_dir * directory)
+cli_status_make_cmd(struct cli_dir *              directory,
+                    const struct lysc_node_leaf * leaf,
+                    const struct cli_context *    context)
 {
 	cli_dir_assert(directory);
 	cli_assert(cli_dir_type(directory) == CLI_DIR_NODE_TYPE);
+	cli_assert(leaf);
+	cli_assert_context(context);
 
-	struct cli_cmd * cmd;
+	/*
+	 * Make sure that there is at least one leaf suitable for the status
+	 * command to display available informations.
+	 */
+	if (cli_status_filter_node(&leaf->node)) {
+		struct cli_cmd * cmd;
 
-	cmd = cli_dir_find_cmd(directory, "status");
-	if (!cmd)
-		cmd = cli_status_create_cmd(directory);
+		cmd = cli_dir_find_cmd(directory, "status");
+		if (cmd)
+			return cmd;
 
-	cli_assert(cmd);
-
-	return cmd;
+		return (struct cli_cmd *)cli_status_create_cmd(directory,
+		                                               context);
+	}
+	else
+		return NULL;
 }

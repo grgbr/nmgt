@@ -20,12 +20,36 @@ cli_ly_nodetype_str(uint16_t nodetype)
  * Libyang (compiled) schema node handling
  ******************************************************************************/
 
+static inline uint16_t
+cli_lysc_conf_flags(const struct lysc_node * node)
+{
+	cli_assert(node);
+
+	return node->flags & LYS_CONFIG_MASK;
+}
+
+static inline uint16_t
+cli_lysc_status_flags(const struct lysc_node * node)
+{
+	cli_assert(node);
+
+	return node->flags & LYS_STATUS_MASK;
+}
+
 static inline const struct lysc_node *
 cli_lysc_parent(const struct lysc_node * node)
 {
 	cli_assert(node);
 
 	return lysc_data_parent(node);
+}
+
+static inline const struct lysc_node *
+cli_lysc_child(const struct lysc_node * node)
+{
+	cli_assert(node);
+
+	return lysc_node_child(node);
 }
 
 extern char *
@@ -60,8 +84,11 @@ cli_lysc_find_nodeset(const struct cli_context * context,
 	                                              : NULL;
 }
 
+#define cli_lysc_foreach_child(_node, _child) \
+	LY_LIST_FOR(cli_lysc_child(_node), _child)
+
 typedef int cli_lysc_visit_fn(struct cli_context *,
-                              struct lysc_node *,
+                              const struct lysc_node *,
                               enum cli_walk_event,
                               void *);
 
@@ -70,10 +97,10 @@ typedef int cli_lysc_visit_fn(struct cli_context *,
  * given in argument.
  */
 extern int
-cli_lysc_walk_node(struct cli_context * context,
-                   struct lysc_node *   node,
-                   cli_lysc_visit_fn *  visit,
-                   void *               data);
+cli_lysc_walk_node(struct cli_context *      context,
+                   const struct lysc_node *  node,
+                   cli_lysc_visit_fn *       visit,
+                   void *                    data);
 
 /*
  * Print YANG specification for the libyang schema node given in argument
@@ -216,23 +243,61 @@ cli_lys_print_module_diag(const struct cli_context * context,
  * Libyang data handling
  ******************************************************************************/
 
-#define cli_lyd_foreach_node(_root, _node) \
-	LY_LIST_FOR(_root, _node)
-
 #define cli_lyd_foreach(_data, _node) \
 	LY_LIST_FOR((_data)->tree, _node)
+
+#define cli_lyd_foreach_child(_data, _child) \
+	LY_LIST_FOR(lyd_child((_data)->tree), child)
 
 extern int
 cli_lyd_load(const struct cli_context * context,
              const char *               xpath,
              unsigned int               depth,
+             sr_get_oper_flag_t         flags,
              sr_data_t **               data);
 
 extern int
-cli_lyd_load_from_node(const struct cli_context * context,
-                       const struct lysc_node *   node,
-                       unsigned int               depth,
-                       sr_data_t **               data);
+cli_lyd_load_from_schema(const struct cli_context * context,
+                         const struct lysc_node *   node,
+                         unsigned int               depth,
+                         sr_get_oper_flag_t         flags,
+                         sr_data_t **               data);
+
+/* Get value of a single data node. */
+static inline const char *
+cli_lyd_node_value(const sr_data_t * data)
+{
+	cli_assert(data);
+	cli_assert(data->tree);
+	cli_assert(LYD_NODE_IS_ALONE(data->tree));
+	cli_assert(!lyd_child_any(data->tree));
+
+	return lyd_get_value(data->tree);
+}
+
+/* Indicate if the value of a single data node is the default value. */
+static inline bool
+cli_lyd_node_is_default(const sr_data_t * data)
+{
+	cli_assert(data);
+	cli_assert(data->tree);
+	cli_assert(LYD_NODE_IS_ALONE(data->tree));
+	cli_assert(!lyd_child_any(data->tree));
+
+	return !!lyd_is_default(data->tree);
+}
+
+/* Load a single data node identified by XPATH. */
+extern int
+cli_lyd_load_node(const struct cli_context * context,
+                  const char *               xpath,
+                  sr_data_t **               data);
+
+/* Load a single data node identified thanks to a schema node. */
+extern int
+cli_lyd_load_node_from_schema(const struct cli_context * context,
+                              const struct lysc_node *   node,
+                              sr_data_t **               data);
 
 static inline void
 cli_lyd_unload(sr_data_t * data)

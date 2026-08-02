@@ -11,16 +11,16 @@ cli_build_handle_leaf(struct cli_context *          context,
 	const struct lysc_node_leaf * leaf = (const struct lysc_node_leaf *)
 	                                     node;
 
-	cli_status_make_cmd(build->parent);
+	cli_status_make_cmd(build->parent, leaf, context);
 
 	return 0;
 }
 
 int
-cli_build_tree_dir(struct cli_context * context,
-                   struct lysc_node *   node,
-                   enum cli_walk_event  event,
-                   void *               data)
+cli_build_tree_dir(struct cli_context *     context,
+                   const struct lysc_node * node,
+                   enum cli_walk_event      event,
+                   void *                   data)
 {
 	cli_assert_context(context);
 	cli_assert(node);

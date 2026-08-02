@@ -224,21 +224,25 @@ cli_cmd_fini(struct cli_cmd * command)
 	cli_cmd_assert(command);
 
 	cli_node_walk_safe(&command->super, cli_cmd_destroy_arg, NULL);
+
+	command->ops->fini(command);
 }
 
 int
-cli_cmd_create(struct cli_cmd **          command,
-               const char *               name,
-               const struct cli_cmd_ops * opers)
+cli_cmd_sized_create(struct cli_cmd **          command,
+                     size_t                     size,
+                     const char *               name,
+                     const struct cli_cmd_ops * opers)
 {
 	cli_assert(command);
+	cli_assert(size >= sizeof(**command));
 	cli_assert(name);
 	cli_cmd_assert_ops(opers);
 
 	struct cli_cmd * cmd;
 	int              err;
 
-	cmd = cli_malloc(sizeof(*cmd));
+	cmd = cli_malloc(size);
 
 	err = cli_cmd_init(cmd, name, opers);
 	if (err)

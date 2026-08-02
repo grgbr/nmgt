@@ -25,9 +25,9 @@ cli_build_setup(struct cli_tree_build * builder, struct cli_dir * directory)
 }
 
 extern int
-cli_build_tree_dir(struct cli_context * context,
-                   struct lysc_node *   node,
-                   enum cli_walk_event  event,
-                   void *               data);
+cli_build_tree_dir(struct cli_context *     context,
+                   const struct lysc_node * node,
+                   enum cli_walk_event      event,
+                   void *                   data);
 
 #endif /* _CLI_BUILD_H */

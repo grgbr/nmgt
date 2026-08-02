@@ -23,15 +23,19 @@ typedef void cli_cmd_complete_fn(const struct cli_cmd *,
                                  const char * const [],
                                  struct cli_match *);
 
+typedef void cli_cmd_fini_fn(struct cli_cmd *);
+
 struct cli_cmd_ops {
 	cli_cmd_parse_fn *    parse;
 	cli_cmd_complete_fn * complete;
+	cli_cmd_fini_fn *     fini;
 };
 
 #define cli_cmd_assert_ops(_ops) \
 	cli_assert(_ops); \
 	cli_assert((_ops)->parse); \
-	cli_assert((_ops)->complete)
+	cli_assert((_ops)->complete); \
+	cli_assert((_ops)->fini)
 
 struct cli_cmd {
 	struct cli_node            super;
@@ -102,10 +106,29 @@ cli_cmd_init(struct cli_cmd *           command,
 extern void
 cli_cmd_fini(struct cli_cmd * command);
 
+static inline void
+cli_cmd_null_fini(struct cli_cmd * command __cli_unused)
+{
+	cli_cmd_assert(command);
+}
+
 extern int
+cli_cmd_sized_create(struct cli_cmd **          command,
+                     size_t                     size,
+                     const char *               name,
+                     const struct cli_cmd_ops * opers);
+
+static inline int
 cli_cmd_create(struct cli_cmd **          command,
                const char *               name,
-               const struct cli_cmd_ops * opers);
+               const struct cli_cmd_ops * opers)
+{
+	cli_assert(command);
+	cli_assert(name);
+	cli_cmd_assert_ops(opers);
+
+	return cli_cmd_sized_create(command, sizeof(**command), name, opers);
+}
 
 extern int
 cli_cmd_createn_add(struct cli_cmd **          command,
