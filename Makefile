@@ -42,7 +42,7 @@ include utils.mk
 all: sample pyang onmcli
 
 .PHONY: sample
-sample: $(STAMPDIR)/sysrepo #$(STAMPDIR)/nghttp2 $(STAMPDIR)/netopeer2
+sample: $(STAMPDIR)/libsmartcols $(STAMPDIR)/readline $(STAMPDIR)/sysrepo #$(STAMPDIR)/nghttp2 $(STAMPDIR)/netopeer2
 	$(call make_cmd,$(@),PREFIX='$(STAGEDIR)' install)
 
 #
@@ -167,7 +167,7 @@ READLINE_VERS         := $(patsubst readline-%.$(READLINE_TARBALL_EXT),%,$(notdi
 READLINE_TARBALL_BASE := readline-$(READLINE_VERS).$(READLINE_TARBALL_EXT)
 readline: $(STAMPDIR)/readline
 $(STAMPDIR)/readline: | $(SRCDIR)/readline/ $(STAMPDIR)/ $(BUILDDIR)/
-	$(call configure_cmd,$(firstword $(|)))
+	$(call configure_cmd,$(firstword $(|)),--with-curses)
 	$(TOUCH) $(@)
 $(SRCDIR)/readline/: $(DOWNDIR)/$(READLINE_TARBALL_BASE) | $(SRCDIR)/
 	$(call untar_cmd,$(@),$(<))
