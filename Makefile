@@ -141,6 +141,40 @@ $(DOWNDIR)/$(LIBYANG_TARBALL_BASE): | $(DOWNDIR)/
 	$(call fetch_cmd,$(@),$(LIBYANG_URI))
 
 #
+# libsmartcols
+#
+SCOLS_URI          := https://www.kernel.org/pub/linux/utils/util-linux/v2.42/util-linux-2.42.2.tar.xz
+SCOLS_TARBALL_EXT  := $(shell echo '$(notdir $(SCOLS_URI))' | sed 's/util-linux-[0-9.]\+//')
+SCOLS_VERS         := $(patsubst util-linux-%.$(SCOLS_TARBALL_EXT),%,$(notdir $(SCOLS_URI)))
+SCOLS_TARBALL_BASE := util-linux-$(SCOLS_VERS).$(SCOLS_TARBALL_EXT)
+libsmartcols: $(STAMPDIR)/libsmartcols
+$(STAMPDIR)/libsmartcols: | $(SRCDIR)/libsmartcols/ $(STAMPDIR)/ $(BUILDDIR)/
+	$(call configure_cmd,$(firstword $(|)), \
+	                     --disable-all-programs  \
+	                     --enable-libsmartcols)
+	$(TOUCH) $(@)
+$(SRCDIR)/libsmartcols/: $(DOWNDIR)/$(SCOLS_TARBALL_BASE) | $(SRCDIR)/
+	$(call untar_cmd,$(@),$(<))
+$(DOWNDIR)/$(SCOLS_TARBALL_BASE): | $(DOWNDIR)/
+	$(call fetch_cmd,$(@),$(SCOLS_URI))
+
+#
+# readline
+#
+READLINE_URI          := ftp://ftp.cwru.edu/pub/bash/readline-8.3.tar.gz
+READLINE_TARBALL_EXT  := $(shell echo '$(notdir $(READLINE_URI))' | sed 's/readline-[0-9.]\+//')
+READLINE_VERS         := $(patsubst readline-%.$(READLINE_TARBALL_EXT),%,$(notdir $(READLINE_URI)))
+READLINE_TARBALL_BASE := readline-$(READLINE_VERS).$(READLINE_TARBALL_EXT)
+readline: $(STAMPDIR)/readline
+$(STAMPDIR)/readline: | $(SRCDIR)/readline/ $(STAMPDIR)/ $(BUILDDIR)/
+	$(call configure_cmd,$(firstword $(|)))
+	$(TOUCH) $(@)
+$(SRCDIR)/readline/: $(DOWNDIR)/$(READLINE_TARBALL_BASE) | $(SRCDIR)/
+	$(call untar_cmd,$(@),$(<))
+$(DOWNDIR)/$(READLINE_TARBALL_BASE): | $(DOWNDIR)/
+	$(call fetch_cmd,$(@),$(READLINE_URI))
+
+#
 # Nghttp2
 #
 NGHTTP2_URI          := https://github.com/nghttp2/nghttp2/releases/download/v1.69.0/nghttp2-1.69.0.tar.gz
