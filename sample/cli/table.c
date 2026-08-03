@@ -77,7 +77,7 @@ cli_table_cell_set_data(struct libscols_cell * cell, const char * data)
 }
 
 void
-cli_table_cell_set_color(struct libscols_cell * cell, char * color)
+cli_table_cell_set_color(struct libscols_cell * cell, const char * color)
 {
 	cli_assert(cell);
 
@@ -90,7 +90,7 @@ cli_table_cell_set_color(struct libscols_cell * cell, char * color)
 	}
 }
 
-int
+struct libscols_column *
 cli_table_new_col(const struct cli_table * table,
                   const char *             label,
                   double                   whint,
@@ -106,13 +106,19 @@ cli_table_new_col(const struct cli_table * table,
 	int                      err;
 
 	len = strnlen(label, CLI_TABLE_LABEL_MAX);
-	if (!len)
-		return -ENODATA;
-	if (len >= CLI_TABLE_LABEL_MAX)
-		return -ENAMETOOLONG;
+	if (!len) {
+		errno = ENODATA;
+		return NULL;
+	}
+	else if (len >= CLI_TABLE_LABEL_MAX) {
+		errno = ENAMETOOLONG;
+		return NULL;
+	}
 
-	if (scols_table_get_ncols(table->scols) >= CLI_TABLE_COLUMN_MAX)
-		return -ENOBUFS;
+	if (scols_table_get_ncols(table->scols) >= CLI_TABLE_COLUMN_MAX) {
+		errno = ENOBUFS;
+		return NULL;
+	}
 
 	col = scols_table_new_column(table->scols, label, whint, flags);
 	if (!col) {
@@ -124,7 +130,21 @@ cli_table_new_col(const struct cli_table * table,
 	err = scols_cell_set_color(scols_column_get_header(col), "bold");
 	cli_assert(!err);
 
-	return 0;
+	return col;
+}
+
+void
+cli_table_col_set_color(struct libscols_column * column, const char * color)
+{
+	cli_assert(column);
+
+	int err;
+
+	err = scols_column_set_color(column, color);
+	if (err) {
+		cli_assert(err == -ENOMEM);
+		abort();
+	}
 }
 
 struct libscols_line *
@@ -139,6 +159,20 @@ cli_table_new_line(const struct cli_table * table)
 	}
 
 	return ln;
+}
+
+void
+cli_table_line_set_color(struct libscols_line * line, const char * color)
+{
+	cli_assert(line);
+
+	int err;
+
+	err = scols_line_set_color(line, color);
+	if (err) {
+		cli_assert(err == -ENOMEM);
+		abort();
+	}
 }
 
 void
@@ -183,16 +217,16 @@ cli_table_init_from_desc(struct cli_table *            table,
 	cli_table_init(table, context, descriptor->nohead, load);
 
 	for (c = 0; c < descriptor->nr; c++) {
-		const struct cli_table_column_desc * cdesc =
-			&descriptor->cols[c];
-		int                                  err;
+		const struct cli_table_column_desc * cdesc;
+		const struct libscols_column *       col __cli_unused;
 
 		cli_table_assert_col_desc(cdesc);
 
-		err = cli_table_new_col(table,
+		cdesc = &descriptor->cols[c];
+		col = cli_table_new_col(table,
 		                        cdesc->label,
 		                        cdesc->whint,
 		                        cdesc->flags);
-		cli_assert(!err);
+		cli_assert(col);
 	}
 }

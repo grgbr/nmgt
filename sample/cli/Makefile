@@ -5,10 +5,10 @@ CFLAGS  := -Wall -Wextra \
            -fsanitize=leak \
            -fsanitize=undefined \
            $(shell env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
-                       $(PKG_CONFIG) --cflags sysrepo libyang smartcols readline) \
+                       $(PKG_CONFIG) --cflags sysrepo libyang smartcols readline tinfo) \
            $(EXTRA_CFLAGS)
 LDFLAGS := $(shell env PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \
-                       $(PKG_CONFIG) --libs sysrepo libyang smartcols readline) \
+                       $(PKG_CONFIG) --libs sysrepo libyang smartcols readline tinfo) \
            $(EXTRA_LDFLAGS)
 
 .PHONY: all

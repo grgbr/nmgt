@@ -261,9 +261,10 @@ cli_setup_log(sr_log_level_t level)
 #endif /* defined(CONFIG_CLI_LOG) */
 
 static int
-cli_init_context(struct cli_context * context)
+cli_init_context(struct cli_context * context, const char * const * style)
 {
 	cli_assert(context);
+	cli_assert(style);
 
 	int err;
 
@@ -319,6 +320,7 @@ cli_init_context(struct cli_context * context)
 	context->cwd = &context->root;
 	context->isatty = !!isatty(STDOUT_FILENO);
 	context->colored = !!context->isatty;
+	context->style = context->colored ? style : NULL;
 	context->interact = false;
 
 	return SR_ERR_OK;
@@ -361,6 +363,13 @@ cli_fini_context(struct cli_context * context)
  * Top-level logic
  ******************************************************************************/
 
+static const char * const cli_the_style[] = {
+	[CLI_LABEL_STYLE_KIND]   = CLI_UNDERLINE_COLOR,
+	[CLI_VALUE_STYLE_KIND]   = NULL,
+	[CLI_DEFAULT_STYLE_KIND] = CLI_GRAY_COLOR,
+	[CLI_ERROR_STYLE_KIND]   = CLI_BOLD_RED_COLOR
+};
+
 static int
 cli_init(struct cli_context * context)
 {
@@ -370,7 +379,7 @@ cli_init(struct cli_context * context)
 	unsigned int              m;
 	const struct lys_module * mod;
 
-	ret = cli_init_context(context);
+	ret = cli_init_context(context, cli_the_style);
 	if (ret)
 		return ret;
 

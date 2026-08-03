@@ -88,7 +88,7 @@ extern void
 cli_table_cell_set_data(struct libscols_cell * cell, const char * data);
 
 extern void
-cli_table_cell_set_color(struct libscols_cell * cell, char * color);
+cli_table_cell_set_color(struct libscols_cell * cell, const char * color);
 
 static inline struct libscols_cell *
 cli_table_line_get_cell(struct libscols_line * line, unsigned int cell_index)
@@ -156,14 +156,20 @@ cli_table_get_line(const struct cli_table * table, unsigned int line_index)
 	     (_line = cli_table_get_line(_table, _indx), true); \
 	     (_indx)++)
 
-extern int
+extern struct libscols_column *
 cli_table_new_col(const struct cli_table * table,
                   const char *             label,
                   double                   whint,
                   int                      flags);
 
+extern void
+cli_table_col_set_color(struct libscols_column * column, const char * color);
+
 extern struct libscols_line *
 cli_table_new_line(const struct cli_table * table);
+
+extern void
+cli_table_line_set_color(struct libscols_line * line, const char * color);
 
 extern void
 cli_table_init(struct cli_table *         table,

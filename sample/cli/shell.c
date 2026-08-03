@@ -23,8 +23,7 @@ struct cli_shell {
 	cli_assert((_shell)->pref); \
 	cli_assert(!(_shell)->collect_compl || (_shell)->display_compl)
 
-/* TODO: make shell a singleton ?? */
-struct cli_shell cli_the_shell;
+static struct cli_shell cli_the_shell;
 
 void
 cli_shell_enroll_display_compl(cli_shell_display_compl_fn * display,

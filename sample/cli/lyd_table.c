@@ -17,6 +17,8 @@ cli_lyd_table_load(const struct cli_table *   table,
 		sr_data_t *              node;
 		int                      err;
 		struct libscols_cell *   cell;
+		const char * const *     style = cli_get_style(context);
+		const char *             color;
 
 		scn = cli_table_line_get_userdata(ln);
 		cli_assert(scn);
@@ -25,13 +27,21 @@ cli_lyd_table_load(const struct cli_table *   table,
 		cell = cli_table_line_get_cell(ln, 1);
 		if (!err) {
 			cli_table_cell_set_data(cell, cli_lyd_node_value(node));
-			cli_table_cell_set_color(
-				cell,
-				cli_lyd_node_is_default(node) ? NULL : "gray");
+
+			color = !cli_lyd_node_is_default(node)
+			        ? cli_style_get_color(style,
+			                              CLI_VALUE_STYLE_KIND)
+			        : cli_style_get_color(style,
+			                              CLI_DEFAULT_STYLE_KIND);
+			cli_table_cell_set_color(cell, color);
 		}
 		else {
 			cli_table_cell_set_data(cell, "??");
-			cli_table_cell_set_color(cell, "red");
+
+
+			color = cli_style_get_color(style,
+			                            CLI_ERROR_STYLE_KIND);
+			cli_table_cell_set_color(cell, color);
 		}
 
 		cli_lyd_unload(node);
@@ -51,6 +61,7 @@ cli_lyd_table_init(struct cli_lyd_table *         table,
 	cli_assert(filter);
 	cli_assert_context(context);
 
+	struct libscols_column * col;
 	const struct lysc_node * child;
 	int                      err;
 
@@ -60,7 +71,7 @@ cli_lyd_table_init(struct cli_lyd_table *         table,
 #error Invalid maximum number of table columns !
 #endif
 	cli_assert(sizeof("Attribute") <= CLI_TABLE_LABEL_MAX);
-	cli_table_new_col(&table->super, "Attribute", 0.3, 0);
+	col = cli_table_new_col(&table->super, "Attribute", 0.3, 0);
 
 	cli_assert(sizeof("Value") <= CLI_TABLE_LABEL_MAX);
 	cli_table_new_col(&table->super, "Value", 0.7, SCOLS_FL_WRAP);
@@ -77,7 +88,6 @@ cli_lyd_table_init(struct cli_lyd_table *         table,
 
 			cell = cli_table_line_get_cell(ln, 0);
 			cli_table_cell_set_data(cell, leaf->name);
-			cli_table_cell_set_color(cell, "bold");
 		}
 	}
 
@@ -85,6 +95,9 @@ cli_lyd_table_init(struct cli_lyd_table *         table,
 		err = -ENOENT;
 		goto fini;
 	}
+
+	cli_table_col_set_color(col, cli_style_get_color(cli_get_style(context),
+	                                                 CLI_LABEL_STYLE_KIND));
 
 	return 0;
 

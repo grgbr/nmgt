@@ -6,8 +6,6 @@
 #include <stdbool.h>
 #include <signal.h>
 
-struct cli_shell;
-
 typedef void cli_shell_collect_compl_fn(struct cli_match *,
                                         const char *,
                                         size_t,
