@@ -187,10 +187,17 @@ cli_dir_add_cmd(struct cli_dir * directory, struct cli_cmd * command)
 {
 	cli_dir_assert(directory);
 	cli_cmd_assert(command);
+	cli_assert(!cli_dir_find_cmd(directory, command->name));
 
 	cli_node_add_sibling((struct cli_node **)&directory->cmds,
 	                     &command->super);
 }
+
+extern int
+cli_dir_create_cmdn_add(struct cli_dir *           directory,
+                        struct cli_cmd **          command,
+                        const char *               name,
+                        const struct cli_cmd_ops * opers);
 
 extern void
 cli_dir_init_root(struct cli_dir * root);

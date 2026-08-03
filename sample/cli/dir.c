@@ -439,6 +439,30 @@ cli_dir_add_child(struct cli_dir * directory, struct cli_dir * child)
 	child->parent = directory;
 }
 
+int
+cli_dir_create_cmdn_add(struct cli_dir *           directory,
+                        struct cli_cmd **          command,
+                        const char *               name,
+                        const struct cli_cmd_ops * opers)
+{
+	cli_dir_assert(directory);
+	cli_assert(command);
+	cli_assert(name);
+	cli_assert(name[0] != '\0');
+	cli_assert(!cli_dir_find_cmd(directory, name));
+	cli_cmd_assert_ops(opers);
+
+	int ret;
+
+	ret = cli_cmd_create(command, name, opers);
+	if (ret)
+		return ret;
+
+	cli_dir_add_cmd(directory, *command);
+
+	return 0;
+}
+
 static void
 _cli_dir_init(struct cli_dir *  directory,
               const char *      name,

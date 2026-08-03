@@ -1,3 +1,4 @@
 * enhance directory completion logic: disable completion when a single argument
   is expected and one directory has already been completed in the current
   command line.
+* refactor status / config / counters commands code...

@@ -220,7 +220,7 @@ cli_schema_build_cmd(struct cli_dir * directory)
 	 * with the "schema" name argument.
 	 */
 	cli_assert(sizeof("schema") <= CLI_ARG_MAX);
-	cli_cmd_createn_add(&cmd, "schema", &cli_schema_cmd_ops, directory);
+	cli_dir_create_cmdn_add(directory, &cmd, "schema", &cli_schema_cmd_ops);
 
 	/* Cannot fail. */
 	choice = cli_arg_createn_add_choice((struct cli_node *)cmd);

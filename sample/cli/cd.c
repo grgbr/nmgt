@@ -100,7 +100,7 @@ cli_chdir_build_cmd(struct cli_dir * directory)
 	 * with the "cd" name argument.
 	 */
 	cli_assert(sizeof("cd") <= CLI_ARG_MAX);
-	cli_cmd_createn_add(&cmd, "cd", &cli_chdir_cmd_ops, directory);
+	cli_dir_create_cmdn_add(directory, &cmd, "cd", &cli_chdir_cmd_ops);
 
 	/* Cannot fail either. */
 	cli_dir_work_createn_add_arg(true, (struct cli_node *)cmd);

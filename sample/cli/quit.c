@@ -73,5 +73,5 @@ cli_quit_build_cmd(struct cli_dir * directory)
 	 * with the "quit" name argument.
 	 */
 	cli_assert(sizeof("quit") <= CLI_ARG_MAX);
-	cli_cmd_createn_add(&cmd, "quit", &cli_quit_cmd_ops, directory);
+	cli_dir_create_cmdn_add(directory, &cmd, "quit", &cli_quit_cmd_ops);
 }

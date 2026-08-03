@@ -1,5 +1,6 @@
 #include "build.h"
 #include "cli.h"
+#include "config.h"
 #include "status.h"
 #include "yang.h"
 
@@ -11,6 +12,7 @@ cli_build_handle_leaf(struct cli_context *          context,
 	const struct lysc_node_leaf * leaf = (const struct lysc_node_leaf *)
 	                                     node;
 
+	cli_config_make_cmd(build->parent, leaf, context);
 	cli_status_make_cmd(build->parent, leaf, context);
 
 	return 0;
