@@ -66,6 +66,38 @@ cli_status_show_json(const struct cli_cmd *     command,
 	return -EBADR;
 }
 
+static int
+cli_status_show_xml(const struct cli_cmd *     command,
+                    const struct lysc_node *   schema,
+                    const struct cli_context * context)
+{
+	sr_data_t * data;
+	int         ret;
+
+	ret = cli_lyd_load_from_schema(context,
+	                               schema,
+	                               2,
+	                               SR_OPER_NO_CONFIG,
+	                               &data);
+	if (ret) {
+		cli_cmd_log(command, "cannot load: %s.", sr_strerror(ret));
+		return -ENOMSG;
+	}
+
+	ret = lyd_print_all(context->lyout,
+	                    data->tree,
+	                    LYD_XML,
+	                    LYD_PRINT_WD_ALL_TAG);
+	if (ret) {
+		cli_cmd_log(command, "cannot show: %s.", ly_strerr(ret));
+		ret = -EBADR;
+	}
+
+	cli_lyd_unload(data);
+
+	return -EBADR;
+}
+
 /******************************************************************************
  * `status' command handling.
  * Print state data related to the directory node given in argument.
@@ -116,6 +148,11 @@ cli_status_exec_work(struct cli_work * work, struct cli_context * context)
 		break;
 
 	case CLI_XML_DATA_FMT:
+		ret = cli_status_show_xml(wk->super.cmd,
+		                          dir->sch_node,
+		                          context);
+		break;
+
 	default:
 		cli_assert(0);
 	}
