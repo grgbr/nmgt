@@ -327,14 +327,8 @@ cli_lyd_load_node(const struct cli_context * context,
 	if (err != SR_ERR_OK)
 		return err;
 
-	if (!*data)
-		return SR_ERR_NOT_FOUND;
-
-	if (!(*data)->tree) {
-		sr_release_data(*data);
-		*data = NULL;
-		return SR_ERR_NOT_FOUND;
-	}
+	cli_assert(*data);
+	cli_assert((*data)->tree);
 
 	return SR_ERR_OK;
 }
