@@ -1,0 +1,22 @@
+module oven-cli {
+	yang-version 1.1;
+	namespace "urn:sysrepo:oven-cli";
+	prefix ov-cli;
+
+	import oven {
+		prefix ov;
+	}
+
+	import cli-extensions {
+		prefix cli-ext;
+	}
+
+	revision 2026-08-04 {
+		description "Initial revision.";
+	}
+
+	cli-ext:mkdir "/services/oven";
+	//augment "/ov:oven" {
+	//	cli-ext:mkdir "/services/oven";
+	//}
+}

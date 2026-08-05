@@ -186,7 +186,7 @@ cli_lys_find_module(const struct cli_context * context, const char * module);
  * Iterate over YANG implemented modules, skipping sysrepo / libyang internal
  * ones.
  * Return compiled and (features) implemented, i.e. completely resolved modules
- * with top-level data node only.
+ * with top-level data node or extension instances only.
  */
 #define cli_lys_foreach_module(_context, _index, _module) \
 	for ((_index) = 0, \

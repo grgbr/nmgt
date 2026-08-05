@@ -1,0 +1,31 @@
+/******************************************************************************
+ * Command line YANG extensions.
+ *
+ * For inspiration, see:
+ * <openconfig-public>/release/models/openconfig-extensions.yang
+ ******************************************************************************/
+
+module cli-extensions {
+	yang-version 1.1;
+	namespace "urn:cli:yang:cli-extensions";
+	prefix cli-ext;
+
+	description "This module provides command line specific extensions to
+                     the YANG language.";
+
+	revision 2026-08-04 {
+		description "Initial revision.";
+	}
+
+	extension mkdir {
+		argument "path" {
+			yin-element true;
+		}
+
+		description "When specified, this extension instructs the
+			     command line shell to instantiate a menu directory
+			     entry identified by the path argument.";
+	}
+
+	cli-ext:mkdir "/services";
+}

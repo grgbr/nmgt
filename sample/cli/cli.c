@@ -375,9 +375,7 @@ cli_init(struct cli_context * context)
 {
 	cli_assert(context);
 
-	int                       ret;
-	unsigned int              m;
-	const struct lys_module * mod;
+	int ret;
 
 	ret = cli_init_context(context, cli_the_style);
 	if (ret)
@@ -391,33 +389,9 @@ cli_init(struct cli_context * context)
 	cli_schema_build_cmd(&context->root);
 	cli_quit_build_cmd(&context->root);
 
-	cli_lys_foreach_module(context, m, mod) {
-		struct cli_dir *      dir;
-		struct cli_tree_build build;
-
-		dir = cli_dir_create_module(mod->name, mod);
-		if (!dir) {
-			char * xpath;
-
-			xpath = cli_lys_module_xpath(mod);
-			cli_log("'%s': cannot create module directory entry.",
-			        xpath);
-			cli_free(xpath);
-
-			ret = -ENOTSUP;
-			goto fini;
-		}
-
-		cli_dir_add_child(&context->root, dir);
-
-		cli_build_setup(&build, dir);
-		ret = cli_lys_walk_module(context,
-		                          mod,
-		                          cli_build_tree_dir,
-		                          &build);
-		if (ret)
-			goto fini;
-	}
+	ret = cli_build_from_schema(context);
+	if (ret)
+		goto fini;
 
 	return 0;
 

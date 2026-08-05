@@ -2,6 +2,8 @@ include ../utils.mk
 
 subdirs := oven cli ntp iana ethernet #vlan 802 restconf netconf
 
+install-oven: install-cli
+
 .PHONY: all
 all: build
 

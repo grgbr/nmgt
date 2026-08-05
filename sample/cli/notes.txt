@@ -56,3 +56,19 @@ Cons
 
 * restconf like interface to develop (for web page API implementation)
 * limited sysrepo/gnmi support (see sysrepo-gnxi)
+
+YANG Extension parse / compile
+==============================
+
+As sysrepo creates libyang context with LY_CTX_STATIC_PLUGINS_ONLY flags, our
+own external plugin cannot be loaded out of the box:
+- we must patch sysrepo to disable this flags in sr_ly_ctx_new() ;
+- or build our extension plugins as static ones within libyang such as plugins
+  found under <libyang>src/plugins_exts/ ;
+- anything else ?
+
+lys_module->extensions filled in at lys_parse_in() time for extension modules
+(i.e., the one that defines the extension)
+
+lys_module->compiled->exts filled in with extension instances at lys_compile()
+time thanks to the COMPILE_EXTS_GOTO call for module that uses extensions.

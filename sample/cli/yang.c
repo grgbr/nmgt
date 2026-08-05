@@ -89,8 +89,9 @@ cli_lys_next_module(const struct cli_context * context, unsigned int * index)
 
 	mod = ly_ctx_get_module_iter(context->lyctx, index);
 	while (mod) {
-		if (mod->implemented &&
-		    mod->compiled->data &&
+		if (mod->implemented &&      /* implemented, not just imported */
+		    (mod->compiled->data ||  /* has schema nodes */
+		     mod->compiled->exts) && /* has schema extension instances */
 		    !sr_is_module_internal(mod)) {
 			/*
 			 * Return external implemented modules that hold

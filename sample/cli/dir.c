@@ -550,13 +550,16 @@ cli_dir_create(const char * name, enum cli_dir_type type, const void * schema)
 	cli_assert(name);
 
 	struct cli_dir * dir;
+	int              err;
 
 	dir = cli_malloc(sizeof(*dir));
-	if (!cli_dir_init(dir, name, type, schema))
+	err = cli_dir_init(dir, name, type, schema);
+	if (!err)
 		return dir;
 
 	cli_free(dir);
 
+	errno = -err;
 	return NULL;
 }
 
