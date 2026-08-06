@@ -293,8 +293,8 @@ cli_path_push_head(struct cli_path * path,
 	cli_assert(length);
 	cli_assert(!cli_path_comp_isok(component, length));
 
-	struct cli_path_comp * comp;
 	unsigned int           head;
+	struct cli_path_comp * comp;
 
 	cli_path_grow(path);
 
@@ -308,6 +308,25 @@ cli_path_push_head(struct cli_path * path,
 	path->cnt++;
 }
 
+const struct cli_path_comp *
+cli_path_pop_head(struct cli_path * path)
+{
+	cli_path_assert(path);
+
+	if (path->cnt) {
+		const struct cli_path_comp * comp;
+
+		comp = &path->comps[path->head];
+
+		path->head = (path->head + 1) % path->nr;
+		path->cnt--;
+
+		return comp;
+	}
+	else
+		return NULL;
+}
+
 void
 cli_path_push_tail(struct cli_path * path,
                    const char *      component,
@@ -318,8 +337,8 @@ cli_path_push_tail(struct cli_path * path,
 	cli_assert(length);
 	cli_assert(!cli_path_comp_isok(component, length));
 
-	struct cli_path_comp * comp;
 	unsigned int           tail;
+	struct cli_path_comp * comp;
 
 	cli_path_grow(path);
 
@@ -330,6 +349,24 @@ cli_path_push_tail(struct cli_path * path,
 	comp->len = length;
 
 	path->cnt++;
+}
+
+const struct cli_path_comp *
+cli_path_pop_tail(struct cli_path * path)
+{
+	cli_path_assert(path);
+
+	if (path->cnt) {
+		const struct cli_path_comp * comp;
+
+		comp = &path->comps[(path->head + path->cnt - 1) % path->nr];
+
+		path->cnt--;
+
+		return comp;
+	}
+	else
+		return NULL;
 }
 
 static size_t

@@ -17,8 +17,37 @@ cli_ly_nodetype_str(uint16_t nodetype)
 }
 
 /******************************************************************************
- * Libyang (compiled) schema node handling
+ * Libyang (compiled) schema handling
  ******************************************************************************/
+
+/**
+ * Iterate over extension instances.
+ *
+ * @param[in]    _ext_array  a libyang @ref sizedarrays of ::lysc_ext_instance
+ *                           extension instance structures
+ * @param[inout] _ext        pointer to the current ::lysc_ext_instance
+ *                           extension instance structure
+ */
+#define cli_lysc_foreach_extension(_ext_array, _ext) \
+	LY_ARRAY_FOR(_ext_array, struct lysc_ext_instance, _ext)
+
+/**
+ * Tell wether the given extension instance is one of our own `cli-extension`
+ * extension directives or not.
+ *
+ * @param[in] extension   pointer to the extension instance to test
+ * @param[in] identifier  extension directive
+ *
+ * When installed and enabled, the cli extension plugin implements support for 
+ * YANG syntax extensions defined into the `cli-extension.yang` module.
+ *
+ * This function tests wether or not the extension instance given as @p
+ * extension is a `cli-extension` defined statement and which identifier is
+ * given as @p identifier.
+ */
+extern bool
+cli_lysc_is_extension(const struct lysc_ext_instance * extension,
+                      const char *                     identifier);
 
 static inline uint16_t
 cli_lysc_conf_flags(const struct lysc_node * node)

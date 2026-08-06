@@ -570,6 +570,100 @@ cli_dir_destroy(struct cli_dir * directory)
 	cli_free(directory);
 }
 
+int
+cli_dir_make(struct cli_dir ** directory,
+             const char *      path,
+             enum cli_dir_type type,
+             const void *      schema)
+{
+	cli_assert(directory);
+	cli_dir_assert(*directory);
+	cli_assert(path);
+	cli_assert((type == CLI_DIR_NONE_TYPE) ||
+	           (type == CLI_DIR_MOD_TYPE) ||
+	           (type == CLI_DIR_NODE_TYPE));
+	cli_assert((type == CLI_DIR_NONE_TYPE) || schema);
+
+	if (*path != '\0') {
+		struct cli_path              pth;
+		const struct cli_path_comp * base;
+		struct cli_dir *             dir = *directory;
+		struct cli_dir *             child;
+		int                          ret;
+
+		cli_path_init(&pth);
+
+		/* Parse the given path entirely to tokenize path components. */
+		ret = cli_path_parse(&pth, path);
+		if (ret)
+			goto fini;
+
+		/* Extract last path component. */
+		base = cli_path_pop_tail(&pth);
+		if (!base) {
+			/* Root and current directories already exist. */
+			ret = -EEXIST;
+			goto fini;
+		}
+
+		if (path[0] == '/') {
+			/* Get up to root directory if requested. */
+			while (dir->parent)
+				dir = dir->parent;
+		}
+
+		/* Now search for the parent directory of the given path. */
+		ret = cli_dir_search_from_path((const struct cli_dir **)&dir,
+		                               &pth);
+		if (ret)
+			/* Parent directory not found... */
+			goto fini;
+
+		switch (cli_path_comp_kind(base)) {
+		case CLI_PATH_REG_COMP_KIND:
+			break;
+
+		case CLI_PATH_UPPER_COMP_KIND:
+		case CLI_PATH_CURR_COMP_KIND:
+			/* Well, current and upper directory already exist... */
+			ret = -EEXIST;
+			goto fini;
+
+		default:
+			cli_assert(0);
+		}
+
+		/*
+		 * Make sure that the parent directory found has no child with
+		 * the same base name as the requested one.
+		 */
+		cli_dir_foreach_child(dir, child) {
+			if (!cli_path_comp_ncmp(base,
+			                        child->name,
+			                        strlen(child->name)))
+				return -EEXIST;
+		}
+
+		/*
+		 * Finally create the new directory and register it to its
+		 * parent.
+		 */
+		child = cli_malloc(sizeof(*child));
+		_cli_dir_init(child, base->str, base->len, type, schema);
+		cli_dir_add_child(dir, child);
+
+		*directory = child;
+		ret = 0;
+
+fini:
+		cli_path_fini(&pth);
+
+		return ret;
+	}
+	else
+		return -ENODATA;
+}
+
 /******************************************************************************
  * Directory search logic for commands usage.
  ******************************************************************************/

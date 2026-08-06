@@ -288,6 +288,61 @@ cli_lyplg_parse_mkdir(struct lysp_ctx *          context,
 }
 
 /*
+ * Parse 'dirref' extension instances.
+ * @context:   Parse context
+ * @extension: Parsed extension instance data
+ */
+static LY_ERR
+cli_lyplg_parse_dirref(struct lysp_ctx *          context,
+                       struct lysp_ext_instance * extension)
+{
+	LY_ARRAY_COUNT_TYPE        e;
+	struct lysp_ext_instance * exts;
+
+	/* Make sure that the extension is instantiated at an allowed place,
+	 * i.e., within either a module, submodule or container.
+	 */
+	if (extension->parent_stmt != LY_STMT_CONTAINER) {
+		lyplg_ext_parse_log(context,
+		                    extension,
+		                    LY_LLERR,
+		                    LY_EVALID,
+		                    "Extension '%s' is allowed only within "
+		                    "'container' statements, but it is placed "
+		                    "in a '%s' statement.",
+		                    extension->name,
+		                    lyplg_ext_stmt2str(extension->parent_stmt));
+		return LY_EINVAL;
+	}
+
+	/*
+	 * Make sure the `dirref' extension is not instantiated multiple times
+	 * from within the parent.
+	 */
+	exts = ((struct lysp_module *)extension->parent)->exts;
+	LY_ARRAY_FOR(exts, e) {
+		if ((&exts[e] != extension) &&
+		    (exts[e].name == extension->name)) {
+			lyplg_ext_parse_log(
+				context,
+				extension,
+				LY_LLERR,
+				LY_EVALID,
+				"Extension '%s' is instantiated "
+				"multiple times within the same "
+				"'%s' container.",
+				extension->name,
+				lyplg_ext_stmt2str(extension->parent_stmt));
+			return LY_EINVAL;
+		}
+	}
+
+#warning TODO: parse path argument !!
+
+	return LY_SUCCESS;
+}
+
+/*
  * Define libyang command line extensions plugin.
  */
 LYPLG_EXTENSIONS = {
@@ -299,6 +354,26 @@ LYPLG_EXTENSIONS = {
 		.plugin = {
 			.id             = "ly2 cli",
 			.parse          = cli_lyplg_parse_mkdir,
+			.compile        = NULL,
+			.printer_info   = NULL,
+			.node_xpath     = NULL,
+			.snode_xpath    = NULL,
+			.snode          = NULL,
+			.validate       = NULL,
+			.pfree          = NULL,
+			.cfree          = NULL,
+			.compiled_size  = NULL,
+			.compiled_print = NULL
+		}
+	},
+	{ /* dirref extension */
+		.module   = "cli-extensions",
+		.revision = NULL,
+		.name     = "dirref",
+		
+		.plugin = {
+			.id             = "ly2 cli",
+			.parse          = cli_lyplg_parse_dirref,
 			.compile        = NULL,
 			.printer_info   = NULL,
 			.node_xpath     = NULL,

@@ -151,8 +151,27 @@ cli_lys_print_module_diag(const struct cli_context * context,
 }
 
 /******************************************************************************
- * Libyang (compiled) schema node handling
+ * Libyang (compiled) schema handling
  ******************************************************************************/
+
+bool
+cli_lysc_is_extension(const struct lysc_ext_instance * extension,
+                      const char *                     identifier)
+{
+	cli_assert(extension);
+	cli_assert(extension->def);
+	cli_assert(extension->def->module);
+	cli_assert(identifier);
+	cli_assert(identifier[0]);
+
+	const struct lysc_ext *   def = extension->def;
+	const struct lys_module * mod = def->module;
+
+	return !strcmp(mod->name, "cli-extensions") &&
+	       !strcmp(mod->ns, "urn:cli:yang:cli-extensions") &&
+	       !(def->flags & LYS_STATUS_DEPRC) &&
+	       !strcmp(def->name, identifier);
+}
 
 char *
 cli_lysc_node_xpath(const struct lysc_node * node)

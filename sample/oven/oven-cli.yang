@@ -11,12 +11,17 @@ module oven-cli {
 		prefix cli-ext;
 	}
 
-	revision 2026-08-04 {
+	revision 2026-08-06 {
 		description "Initial revision.";
 	}
 
 	cli-ext:mkdir "/services/oven";
-	//augment "/ov:oven" {
-	//	cli-ext:mkdir "/services/oven";
-	//}
+
+	augment "/ov:oven" {
+		cli-ext:dirref "/services/oven";
+	}
+
+	augment "/ov:oven-state" {
+		cli-ext:dirref "/services/oven";
+	}
 }

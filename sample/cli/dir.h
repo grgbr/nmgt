@@ -235,6 +235,16 @@ cli_dir_create_module(const char * name, const struct lys_module * module)
 extern void
 cli_dir_destroy(struct cli_dir * directory);
 
+/*
+ * Create a new directory identified by `path' relatively to `directory'.
+ * The newly created directory is returned into `directory'.
+ */
+extern int
+cli_dir_make(struct cli_dir ** directory,
+             const char *      path,
+             enum cli_dir_type type,
+             const void *      schema);
+
 /******************************************************************************
  * Directory search logic for commands usage.
  ******************************************************************************/

@@ -15,6 +15,50 @@ static int
 cli_build_handle_container(const struct lysc_node * node,
                            struct cli_tree_build *  build)
 {
+#warning Implement me!!
+#if 0
+	const struct lysc_ext_instance * ext;
+	int                              err;
+	const char *                     msg;
+
+#warning What to do when multiple cliext statement are there ?!!!
+	cli_lysc_foreach_extension(node->exts, ext) {
+		if (cli_lysc_is_extension(ext, "mkdir")) {
+			err = cli_dir_make(&build->parent,
+			                   ext->argument,
+			                   CLI_DIR_NODE_TYPE,
+			                   node);
+			if (err) {
+				msg = "cannot create directory entry";
+				goto err;
+			}
+		}
+		else if (cli_lysc_is_extension(ext, "dirref")) {
+			err = cli_dir_search((const struct cli_dir **)
+			                     &build->parent,
+			                     ext->argument);
+			if (err) {
+				msg = "cannot find directory entry";
+				goto err;
+			}
+		}
+	}
+
+	return 0;
+
+err:
+	{
+		char * xpath;
+
+		xpath = cli_lysc_node_xpath(node);
+		cli_log("'%s': %s: %s.", xpath, msg, cli_dir_strerror(-err));
+		cli_free(xpath);
+	}
+
+	return err;
+
+#warning What to do when no cliext statement is there ?!!!
+#else
 	struct cli_dir * dir;
 
 	dir = cli_dir_create_node(node->name, node);
@@ -22,7 +66,7 @@ cli_build_handle_container(const struct lysc_node * node,
 		char * xpath;
 
 		xpath = cli_lysc_node_xpath(node);
-		cli_log("'%s': cannot create node directory entry.", xpath);
+		cli_log("'%s': cannot create directory entry.", xpath);
 		cli_free(xpath);
 
 		return -ENAMETOOLONG;
@@ -33,6 +77,7 @@ cli_build_handle_container(const struct lysc_node * node,
 	build->parent = dir;
 
 	return 0;
+#endif
 }
 
 static int
@@ -123,35 +168,30 @@ cli_build_tree_dir(struct cli_context *     context,
 }
 
 static int
-cli_build_mkdir(const char *              name,
-                struct cli_dir **         parent,
+cli_build_mkdir(struct cli_dir **         parent,
+                const char *              path,
                 const struct lys_module * module)
 {
-	cli_assert(name);
 	cli_assert(parent);
 	cli_dir_assert(*parent);
+	cli_assert(path);
 	cli_assert(module);
 
-	struct cli_dir * dir;
+	int err;
 
-	dir = cli_dir_create_module(name, module);
-	if (!dir) {
+	err = cli_dir_make(parent, path, CLI_DIR_MOD_TYPE, module);
+	if (err) {
 		char * xpath;
-		int    err = errno;
 
 		xpath = cli_lys_module_xpath(module);
 		cli_log("'%s': cannot create module directory entry '%s': %s.",
 		        xpath,
-		        name,
-		        strerror(err));
+		        path,
+		        strerror(-err));
 		cli_free(xpath);
 
-		return -err;
+		return err;
 	}
-
-	cli_dir_add_child(*parent, dir);
-
-	*parent = dir;
 
 	return 0;
 }
@@ -166,28 +206,18 @@ cli_build_handle_module(struct cli_context *      context,
 	struct cli_tree_build            build =
 		CLI_TREE_BUILD_SETUP(&context->root);
 
-	LY_ARRAY_FOR(scm->exts, typeof(*ext), ext) {
-		cli_assert(ext->def);
-		cli_assert(ext->def->module);
-
-		const struct lysc_ext * def = ext->def;
-
-		if (!strcmp(def->module->name, "cli-extensions") &&
-		    !strcmp(def->module->ns, "urn:cli:yang:cli-extensions") &&
-		    !(def->flags & LYS_STATUS_DEPRC)) {
-			if (!strcmp(def->name, "mkdir") &&
-			    (def->argname && !strcmp(def->argname, "path"))) {
-				err = cli_build_mkdir(ext->argument,
-				                      &build.parent,
-				                      module);
-				if (err)
-					return err;
-			}
+	cli_lysc_foreach_extension(scm->exts, ext) {
+		if (cli_lysc_is_extension(ext, "mkdir")) {
+			err = cli_build_mkdir(&build.parent,
+			                      ext->argument,
+			                      module);
+			if (err)
+				return err;
 		}
 	}
 
 	if (scm->data) {
-		err = cli_build_mkdir(module->name, &build.parent, module);
+		err = cli_build_mkdir(&build.parent, module->name, module);
 		if (err)
 			return err;
 

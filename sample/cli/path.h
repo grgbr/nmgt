@@ -123,10 +123,16 @@ cli_path_push_head(struct cli_path * path,
                    const char *      component,
                    size_t            length);
 
+extern const struct cli_path_comp *
+cli_path_pop_head(struct cli_path * path);
+
 extern void
 cli_path_push_tail(struct cli_path * path,
                    const char *      component,
                    size_t            length);
+
+extern const struct cli_path_comp *
+cli_path_pop_tail(struct cli_path * path);
 
 extern ssize_t
 cli_path_parse_comp(enum cli_path_comp_kind * kind,
