@@ -14,6 +14,12 @@
 #error Maximum path length not large enough !
 #endif /* CLI_PATH_MAX <= CLI_PATH_NAME_MAX */
 
+#define CLI_PATH_INIT_NR (CLI_PATH_MAX / CLI_PATH_NAME_MAX)
+#if CLI_PATH_INIT_NR < 4
+#undef CLI_PATH_INIT_NR
+#define CLI_PATH_INIT_NR (4)
+#endif /* CLI_PATH_INIT_NR < 4 */
+
 struct cli_path_comp {
 	const char * str;
 	size_t       len;

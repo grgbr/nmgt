@@ -47,12 +47,22 @@ struct cli_cmd {
 	cli_assert(_cmd); \
 	cli_node_assert(&(_cmd)->super); \
 	cli_cmd_assert_ops((_cmd)->ops); \
-	cli_assert((_cmd)->name); \
-	cli_assert((_cmd)->name[0] != '\0'); \
-	cli_assert(strnlen((_cmd)->name, CLI_ARG_MAX) < CLI_ARG_MAX)
+	cli_assert(cli_cmd_name_isok((_cmd)->name))
 
 #define cli_cmd_log(_cmd, _format, ...) \
 	cli_log("%s: " _format, (_cmd)->name, ## __VA_ARGS__)
+
+static inline bool
+cli_cmd_name_isok(const char * name)
+{
+	cli_assert(name);
+
+	size_t len;
+
+	len = strnlen(name, CLI_ARG_MAX);
+
+	return (len && (len < CLI_ARG_MAX)) ? true : false;
+}
 
 extern int
 cli_cmd_parse_args(const struct cli_cmd * command,

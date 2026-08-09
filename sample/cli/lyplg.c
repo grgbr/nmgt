@@ -229,6 +229,7 @@ const struct lyplg_ext_record plugins_openconfig[] = {
 #include <libyang/plugins_exts.h>
 #include <stdlib.h>
 
+#if 0
 /*
  * Parse 'mkdir' extension instances.
  * @context:   Parse context
@@ -241,30 +242,23 @@ cli_lyplg_parse_mkdir(struct lysp_ctx *          context,
 	LY_ARRAY_COUNT_TYPE        e;
 	struct lysp_ext_instance * exts;
 
-	/* Make sure that the extension is instantiated at an allowed place,
-	 * i.e., within either a module, submodule or container.
+	/*
+	 * Make sure that the extension is instantiated at an allowed place,
+	 * i.e., within either a module, submodule or container statement.
 	 */
-	if ((extension->parent_stmt != LY_STMT_MODULE) &&
-	    (extension->parent_stmt != LY_STMT_SUBMODULE) &&
-	    (extension->parent_stmt != LY_STMT_CONTAINER)) {
-		lyplg_ext_parse_log(context,
-		                    extension,
-		                    LY_LLERR,
-		                    LY_EVALID,
-		                    "Extension '%s' is allowed only within "
-		                    "'module', 'submodule', or 'container' "
-		                    "statements, but it is placed in a '%s' "
-		                    "statement.",
-		                    extension->name,
-		                    lyplg_ext_stmt2str(extension->parent_stmt));
-		return LY_EINVAL;
-	}
+	if (extension->parent_stmt == LY_STMT_MODULE)
+		exts = ((struct lysp_module *)extension->parent)->exts;
+	else if (extension->parent_stmt == LY_STMT_SUBMODULE)
+		exts = ((struct lysp_submodule *)extension->parent)->exts;
+	else if (extension->parent_stmt != LY_STMT_CONTAINER)
+		exts = ((struct lysp_node *)extension->parent)->exts;
+	else
+		goto err;
 
 	/*
 	 * Make sure the `mkdir' extension is not instantiated multiple times
 	 * from within the parent.
 	 */
-	exts = ((struct lysp_module *)extension->parent)->exts;
 	LY_ARRAY_FOR(exts, e) {
 		if ((&exts[e] != extension) &&
 		    (exts[e].name == extension->name) &&
@@ -285,7 +279,22 @@ cli_lyplg_parse_mkdir(struct lysp_ctx *          context,
 #warning TODO: parse path argument !!
 
 	return LY_SUCCESS;
+
+err:
+	lyplg_ext_parse_log(context,
+	                    extension,
+	                    LY_LLERR,
+	                    LY_EVALID,
+	                    "Extension '%s' is allowed only within "
+	                    "'module', 'submodule', or 'container' "
+	                    "statements, but it is placed in a '%s' "
+	                    "statement.",
+	                    extension->name,
+	                    lyplg_ext_stmt2str(extension->parent_stmt));
+
+	return LY_EINVAL;
 }
+#endif
 
 /*
  * Parse 'dirref' extension instances.
@@ -299,27 +308,20 @@ cli_lyplg_parse_dirref(struct lysp_ctx *          context,
 	LY_ARRAY_COUNT_TYPE        e;
 	struct lysp_ext_instance * exts;
 
-	/* Make sure that the extension is instantiated at an allowed place,
-	 * i.e., within either a module, submodule or container.
+	/*
+	 * Make sure that the extension is instantiated at an allowed place,
+	 * i.e., within either a container or an augment statement.
 	 */
-	if (extension->parent_stmt != LY_STMT_CONTAINER) {
-		lyplg_ext_parse_log(context,
-		                    extension,
-		                    LY_LLERR,
-		                    LY_EVALID,
-		                    "Extension '%s' is allowed only within "
-		                    "'container' statements, but it is placed "
-		                    "in a '%s' statement.",
-		                    extension->name,
-		                    lyplg_ext_stmt2str(extension->parent_stmt));
-		return LY_EINVAL;
-	}
+	if ((extension->parent_stmt == LY_STMT_CONTAINER) ||
+	    (extension->parent_stmt == LY_STMT_AUGMENT))
+		exts = ((struct lysp_node *)extension->parent)->exts;
+	else
+		goto err;
 
 	/*
 	 * Make sure the `dirref' extension is not instantiated multiple times
 	 * from within the parent.
 	 */
-	exts = ((struct lysp_module *)extension->parent)->exts;
 	LY_ARRAY_FOR(exts, e) {
 		if ((&exts[e] != extension) &&
 		    (exts[e].name == extension->name)) {
@@ -340,12 +342,26 @@ cli_lyplg_parse_dirref(struct lysp_ctx *          context,
 #warning TODO: parse path argument !!
 
 	return LY_SUCCESS;
+
+err:
+	lyplg_ext_parse_log(context,
+	                    extension,
+	                    LY_LLERR,
+	                    LY_EVALID,
+	                    "Extension '%s' is allowed only within "
+	                    "'container' statements, but it is placed "
+	                    "in a '%s' statement.",
+	                    extension->name,
+	                    lyplg_ext_stmt2str(extension->parent_stmt));
+
+	return LY_EINVAL;
 }
 
 /*
  * Define libyang command line extensions plugin.
  */
 LYPLG_EXTENSIONS = {
+#if 0
 	{ /* mkdir extension */
 		.module   = "cli-extensions",
 		.revision = NULL,
@@ -366,6 +382,7 @@ LYPLG_EXTENSIONS = {
 			.compiled_print = NULL
 		}
 	},
+#endif
 	{ /* dirref extension */
 		.module   = "cli-extensions",
 		.revision = NULL,

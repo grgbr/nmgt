@@ -72,3 +72,9 @@ lys_module->extensions filled in at lys_parse_in() time for extension modules
 
 lys_module->compiled->exts filled in with extension instances at lys_compile()
 time thanks to the COMPILE_EXTS_GOTO call for module that uses extensions.
+
+Augment / path parsing / compiling:
+see <libyang>/src/lugins_exts/structure.c
+    lysp_stmt_augment() / lysp_stmt_validate_value()
+    references to LY_STMT_PATH
+

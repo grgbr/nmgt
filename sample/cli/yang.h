@@ -7,6 +7,15 @@
  * Libyang utils
  ******************************************************************************/
 
+#define cli_lysc_log(_node, _format, ...) \
+	({ \
+		char * __xpath; \
+		\
+		__xpath = cli_lysc_node_xpath(_node); \
+		cli_log("'%s': " _format, __xpath, ## __VA_ARGS__); \
+		cli_free(__xpath); \
+	 })
+
 extern const char *
 cli_ly_basetype_str(LY_DATA_TYPE basetype);
 

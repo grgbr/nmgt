@@ -1,95 +1,86 @@
 #include "build.h"
 #include "cli.h"
-#include "config.h"
-#include "status.h"
+#include "show.h"
 #include "yang.h"
 
-struct cli_tree_build {
-	struct cli_dir * parent;
-};
-
-#define CLI_TREE_BUILD_SETUP(_dir) \
-	{ .parent = _dir }
-
 static int
-cli_build_handle_container(const struct lysc_node * node,
-                           struct cli_tree_build *  build)
+cli_build_handle_container(struct cli_context *       context,
+                           const struct lysc_node *   node,
+                           const struct lys_module *  module)
 {
-#warning Implement me!!
+	struct cli_dir * dir = NULL;
+	int              err;
+
 #if 0
 	const struct lysc_ext_instance * ext;
-	int                              err;
-	const char *                     msg;
 
 #warning What to do when multiple cliext statement are there ?!!!
 	cli_lysc_foreach_extension(node->exts, ext) {
+		if (cli_lysc_is_extension(ext, "dirref")) {
+			dir = build->parent;
+			err = cli_dir_search((const struct cli_dir **)&dir,
+			                     ext->argument);
+			if (err) {
+				msg = "cannot find extension directory entry";
+				path = ext->argument;
+				goto err;
+			}
+
+			break;
+		}
+
 		if (cli_lysc_is_extension(ext, "mkdir")) {
-			err = cli_dir_make(&build->parent,
+			dir = build->parent;
+			err = cli_dir_make(&dir,
 			                   ext->argument,
 			                   CLI_DIR_NODE_TYPE,
 			                   node);
 			if (err) {
-				msg = "cannot create directory entry";
+				msg = "cannot create extension directory entry";
+				path = ext->argument;
 				goto err;
 			}
-		}
-		else if (cli_lysc_is_extension(ext, "dirref")) {
-			err = cli_dir_search((const struct cli_dir **)
-			                     &build->parent,
-			                     ext->argument);
-			if (err) {
-				msg = "cannot find directory entry";
-				goto err;
-			}
+
+			break;
 		}
 	}
-
-	return 0;
-
-err:
-	{
-		char * xpath;
-
-		xpath = cli_lysc_node_xpath(node);
-		cli_log("'%s': %s: %s.", xpath, msg, cli_dir_strerror(-err));
-		cli_free(xpath);
-	}
-
-	return err;
 
 #warning What to do when no cliext statement is there ?!!!
-#else
-	struct cli_dir * dir;
-
-	dir = cli_dir_create_node(node->name, node);
 	if (!dir) {
-		char * xpath;
+		dir = cli_dir_create_node(node->name, node);
+		if (!dir) {
+			msg = "cannot create directory entry.";
+			path = node->name;
+			err = -errno;
+			goto err;
+		}
 
-		xpath = cli_lysc_node_xpath(node);
-		cli_log("'%s': cannot create directory entry.", xpath);
-		cli_free(xpath);
+		cli_dir_add_child(build->parent, dir);
+	}
+#endif
 
-		return -ENAMETOOLONG;
+	dir = cli_dir_make_from_node(node, &context->root, module);
+	if (!dir) {
+		err = errno;
+		cli_lysc_log(node,
+		             "cannot create directory entry: %s.",
+		             cli_dir_strerror(err));
+		return -err;
 	}
 
-	cli_dir_add_child(build->parent, dir);
+	err = cli_show_make_config_cmd(dir,
+	                               (const struct lysc_node_container *)node,
+	                               "config",
+	                               context);
+	if (err)
+		return err;
 
-	build->parent = dir;
-
-	return 0;
-#endif
-}
-
-static int
-cli_build_handle_leaf(struct cli_context *          context,
-                      const struct lysc_node *      node,
-                      const struct cli_tree_build * build)
-{
-	const struct lysc_node_leaf * leaf = (const struct lysc_node_leaf *)
-	                                     node;
-
-	cli_config_make_cmd(build->parent, leaf, context);
-	cli_status_make_cmd(build->parent, leaf, context);
+	err = cli_show_make_oper_cmd(dir,
+	                             (const struct lysc_node_container *)node,
+	                             "status",
+	                             context);
+	if (err)
+		return err;
 
 	return 0;
 }
@@ -103,37 +94,25 @@ cli_build_tree_dir(struct cli_context *     context,
 	cli_assert_context(context);
 	cli_assert(node);
 	cli_assert((event == CLI_WALK_PRE_EVT) || (event == CLI_WALK_POST_EVT));
+	cli_assert(data);
 
-	struct cli_tree_build * build = data;
-	int                     ret;
-
-	cli_assert(build);
-	cli_assert(build->parent);
+	const struct lys_module * mod = data;
+	int                       ret;
 
 	switch (node->nodetype) {
 	case LYS_CONTAINER:
-	case LYS_LIST:
 		if (event == CLI_WALK_PRE_EVT) {
-			ret = cli_build_handle_container(node, build);
+			ret = cli_build_handle_container(context, node, mod);
 			if (ret)
 				return ret;
 		}
-		else if (event == CLI_WALK_POST_EVT)
-			build->parent = build->parent->parent;
 
 		break;
 
 	case LYS_LEAF:
-		if (event == CLI_WALK_PRE_EVT) {
-			ret = cli_build_handle_leaf(context, node, build);
-			if (ret)
-				return ret;
+		return CLI_WALK_SKIP_RET;
 
-			return CLI_WALK_SKIP_RET;
-		}
-
-		break;
-
+	case LYS_LIST:
 	case LYS_CHOICE:
 	case LYS_LEAFLIST:
 	case LYS_ANYXML:
@@ -167,6 +146,7 @@ cli_build_tree_dir(struct cli_context *     context,
 	return CLI_WALK_CONT_RET;
 }
 
+#if 0
 static int
 cli_build_mkdir(struct cli_dir **         parent,
                 const char *              path,
@@ -195,42 +175,7 @@ cli_build_mkdir(struct cli_dir **         parent,
 
 	return 0;
 }
-
-static int
-cli_build_handle_module(struct cli_context *      context,
-                        const struct lys_module * module)
-{
-	const struct lysc_module *       scm = module->compiled;
-	const struct lysc_ext_instance * ext;
-	int                              err;
-	struct cli_tree_build            build =
-		CLI_TREE_BUILD_SETUP(&context->root);
-
-	cli_lysc_foreach_extension(scm->exts, ext) {
-		if (cli_lysc_is_extension(ext, "mkdir")) {
-			err = cli_build_mkdir(&build.parent,
-			                      ext->argument,
-			                      module);
-			if (err)
-				return err;
-		}
-	}
-
-	if (scm->data) {
-		err = cli_build_mkdir(&build.parent, module->name, module);
-		if (err)
-			return err;
-
-		err = cli_lys_walk_module(context,
-		                          module,
-		                          cli_build_tree_dir,
-		                          &build);
-		if (err)
-			return err;
-	}
-
-	return 0;
-}
+#endif
 
 int
 cli_build_from_schema(struct cli_context * context)
@@ -239,11 +184,16 @@ cli_build_from_schema(struct cli_context * context)
 	const struct lys_module * mod;
 
 	cli_lys_foreach_module(context, m, mod) {
-		int ret;
+		if (mod->compiled->data) {
+			int ret;
 
-		ret = cli_build_handle_module(context, mod);
-		if (ret)
-			return ret;
+			ret = cli_lys_walk_module(context,
+			                          mod,
+			                          cli_build_tree_dir,
+			                          (void *)mod);
+			if (ret)
+				return ret;
+		}
 	}
 
 	return 0;

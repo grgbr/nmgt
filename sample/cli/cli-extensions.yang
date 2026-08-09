@@ -17,15 +17,65 @@ module cli-extensions {
 		description "Initial revision.";
 	}
 
-	extension mkdir {
-		argument "path" {
-			yin-element true;
-		}
+	/*
+	 * Extension definitions.
+	 */
 
-		description "When specified, this extension instructs the
-			     command line shell to instantiate a menu directory
-			     entry identified by the path argument.";
+	extension menu {
+		description "When specified, this extension directive instructs
+                             the command line shell to attach subsequent command
+                             instantiations to the menu directory entry
+			     identified by the path argument.";
 	}
 
-	cli-ext:mkdir "/services";
+	extension ignore {
+		description "When specified, this extension directive instructs
+                             the command line shell to ignore all menu and
+                             command directives attached to the current
+                             container.";
+	}
+
+	extension show-config-command {
+		argument "name" {
+			yin-element false;
+		}
+
+		description "When specified, this extension directive instructs
+			     the command line shell to instantiate a command
+                             identified by the name given in argument that shows
+                             configuration informations.";
+
+	}
+
+	extension show-state-command {
+		argument "name" {
+			yin-element false;
+		}
+
+		description "When specified, this extension directive instructs
+			     the command line shell to instantiate a command
+                             identified by the name given in argument that shows
+                             operational state informations.";
+	}
+
+	extension edit-config-command {
+		argument "name" {
+			yin-element false;
+		}
+
+		description "When specified, this extension directive instructs
+			     the command line shell to instantiate a command
+                             identified by the name given in argument that
+                             modifies configuration settings.";
+	}
+
+
+	/*
+	 * Top-level menu directory entry definitions.
+	 */
+
+	container services {
+		description "Top-level command line services menu directory
+                             entry.";
+	}
 }

@@ -2,12 +2,6 @@
 #include <stdbool.h>
 #include <string.h>
 
-#define CLI_PATH_INIT_NR (CLI_PATH_MAX / CLI_PATH_NAME_MAX)
-#if CLI_PATH_INIT_NR < 4
-#undef CLI_PATH_INIT_NR
-#define CLI_PATH_INIT_NR (4)
-#endif /* CLI_PATH_INIT_NR < 4 */
-
 const char *
 cli_path_strerror(int error)
 {

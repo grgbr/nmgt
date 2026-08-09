@@ -346,9 +346,7 @@ struct cli_cmd *
 cli_dir_find_cmd(const struct cli_dir * directory, const char * name)
 {
 	cli_dir_assert(directory);
-	cli_assert(name);
-	cli_assert(name[0]);
-	cli_assert(strnlen(name, CLI_ARG_MAX) < CLI_ARG_MAX);
+	cli_assert(cli_cmd_name_isok(name));
 
 	struct cli_node * cmd;
 
@@ -419,6 +417,7 @@ cli_dir_complete_cmd(const struct cli_dir * directory,
 void
 cli_dir_add_child(struct cli_dir * directory, struct cli_dir * child)
 {
+#warning Make sure no other child with the same name exist (assertion).
 	cli_dir_assert(directory);
 	cli_dir_assert(child);
 
@@ -662,6 +661,117 @@ fini:
 	}
 	else
 		return -ENODATA;
+}
+
+static int
+cli_dir_make_child(struct cli_dir ** dir,
+                   const char *      name,
+                   enum cli_dir_type type,
+                   const void *      schema)
+{
+	cli_assert(dir);
+	cli_dir_assert(*dir);
+	cli_assert(name);
+
+	struct cli_dir * node = *dir;
+	struct cli_dir * child;
+
+	cli_dir_foreach_child(node, child) {
+		if (!strcmp(child->name, name)) {
+			if ((child->type == type) &&
+			    (child->sch_void == schema))
+				goto out;
+			else
+				return -EEXIST;
+		}
+	}
+
+	child = cli_dir_create(name, type, schema);
+	if (!child)
+		return -errno;
+
+	cli_dir_add_child(node, child);
+
+out:
+	*dir = child;
+
+	return 0;
+}
+
+struct cli_dir *
+cli_dir_make_from_node(const struct lysc_node *  node,
+                       struct cli_dir *          root,
+                       const struct lys_module * module)
+{
+	cli_assert(node);
+	cli_assert((node->nodetype == LYS_CONTAINER) ||
+	           (node->nodetype == LYS_LIST));
+	cli_assert(module);
+	cli_assert(node->parent || (node->module == module));
+
+	const struct lysc_node ** comps;
+	const struct lysc_node *  scn = node;
+	unsigned int              nr = CLI_PATH_INIT_NR;
+	unsigned int              cnt = 0;
+	int                       err;
+
+	comps = cli_malloc(nr * sizeof(*comps));
+	cli_assert(comps);
+
+	/*
+	 * Get up to the top-level schema node, stacking parent nodes down along
+	 * the path.
+	 */
+	while (scn->parent) {
+		if (cnt == nr) {
+			nr *= 2;
+			comps = cli_realloc(comps, nr * sizeof(*comps));
+			cli_assert(comps);
+		}
+
+		scn = scn->parent;
+		comps[cnt++] = scn;
+	}
+
+	/*
+	 * Now create the top-level directory related to the module given in
+	 * argument.
+	 * Top-level node owner module should be the one that is given in
+	 * argument.
+	 */
+	cli_assert(scn->module == module);
+	err = cli_dir_make_child(&root, module->name, CLI_DIR_MOD_TYPE, module);
+	if (err)
+		goto free;
+
+	/*
+	 * Iterate over stacked parent nodes in reverse order and create
+	 * child directories.
+	 */
+	while (cnt--) {
+		scn = comps[cnt];
+		err = cli_dir_make_child(&root,
+		                         scn->name,
+		                         CLI_DIR_NODE_TYPE,
+		                         scn);
+		if (err)
+			goto free;
+	}
+
+	/* Finally, create directory for `node' given in argument. */
+	err = cli_dir_make_child(&root, node->name, CLI_DIR_NODE_TYPE, node);
+	if (err)
+		goto free;
+
+	cli_free(comps);
+
+	return root;
+
+free:
+	cli_free(comps);
+
+	errno = -err;
+	return NULL;
 }
 
 /******************************************************************************

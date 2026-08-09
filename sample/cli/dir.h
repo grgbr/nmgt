@@ -245,6 +245,11 @@ cli_dir_make(struct cli_dir ** directory,
              enum cli_dir_type type,
              const void *      schema);
 
+struct cli_dir *
+cli_dir_make_from_node(const struct lysc_node *  node,
+                       struct cli_dir *          root,
+                       const struct lys_module * module);
+
 /******************************************************************************
  * Directory search logic for commands usage.
  ******************************************************************************/
