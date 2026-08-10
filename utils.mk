@@ -52,8 +52,10 @@ endef
 # $2: arbitrary make arguments
 define make_cmd
 $(MAKE) --directory='$(strip $(1))' \
+        TOPDIR='$(TOPDIR)' \
+        STAGEDIR='$(STAGEDIR)' \
         DESTDIR='$(DESTDIR)' \
-        PREFIX='$(PREFIX)' \
+        PREFIX='$(STAGEDIR)' \
         BUILDDIR='$(BUILDDIR)/$(strip $(1))' \
         PKG_CONFIG='$(PKG_CONFIG)' \
         PKG_CONFIG_PATH='$(PKG_CONFIG_PATH)' \

@@ -5,6 +5,7 @@
 #
 # apt install libc-ares-dev libjansson-dev libev-dev
 #
+TOPDIR          := $(CURDIR)
 OUTBASE         := $(CURDIR)/out
 DOWNDIR         := $(OUTBASE)/download
 STAMPDIR        := $(OUTBASE)/stamp
@@ -40,6 +41,18 @@ include utils.mk
 
 .PHONY: all
 all: sample pyang onmcli
+
+.PHONY: libyang
+libyang: | $(STAMPDIR)
+	$(call make_cmd,src,$(@))
+	$(TOUCH) $(STAMPDIR)/$(@)
+$(STAMPDIR)/libyang: | $(STAMPDIR)
+	$(call make_cmd,src,$(notdir $(@)))
+	$(TOUCH) $(@)
+.PHONY: clean-libyang
+clean-libyang:
+	$(call make_cmd,src,$(@))
+	$(RM) $(STAMPDIR)/$(subst clobber-,,$(@))
 
 .PHONY: sample
 sample: $(STAMPDIR)/libsmartcols $(STAMPDIR)/readline $(STAMPDIR)/sysrepo #$(STAMPDIR)/nghttp2 $(STAMPDIR)/netopeer2
@@ -122,23 +135,6 @@ $(SRCDIR)/sysrepo/: $(DOWNDIR)/$(SYSREPO_TARBALL_BASE) | $(SRCDIR)/
 	$(call untar_cmd,$(@),$(<))
 $(DOWNDIR)/$(SYSREPO_TARBALL_BASE): | $(DOWNDIR)/
 	$(call fetch_cmd,$(@),$(SYSREPO_URI))
-
-#
-# Libyang
-#
-LIBYANG_URI          := https://github.com/CESNET/libyang/archive/refs/tags/v5.4.9.tar.gz
-LIBYANG_TARBALL_EXT  := $(shell echo '$(notdir $(LIBYANG_URI))' | sed 's/v[0-9.]\+//')
-LIBYANG_VERS         := $(patsubst v%.$(LIBYANG_TARBALL_EXT),%,$(notdir $(LIBYANG_URI)))
-LIBYANG_TARBALL_BASE := libyang-$(LIBYANG_VERS).$(LIBYANG_TARBALL_EXT)
-.PHONY: libyang
-libyang: $(STAMPDIR)/libyang
-$(STAMPDIR)/libyang: | $(SRCDIR)/libyang/ $(STAMPDIR)/ $(BUILDDIR)/
-	$(call cmake_cmd,$(firstword $(|)))
-	$(TOUCH) $(@)
-$(SRCDIR)/libyang/: $(DOWNDIR)/$(LIBYANG_TARBALL_BASE) | $(SRCDIR)/
-	$(call untar_cmd,$(@),$(<))
-$(DOWNDIR)/$(LIBYANG_TARBALL_BASE): | $(DOWNDIR)/
-	$(call fetch_cmd,$(@),$(LIBYANG_URI))
 
 #
 # libsmartcols

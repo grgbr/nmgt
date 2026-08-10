@@ -1,0 +1,5 @@
+[submodule "src/libyang"]
+	path = src/libyang
+	url = git@github.com:grgbr/libyang.git
+[submodule "src/libyang/"]
+	branch = cli-5.8.6.x
