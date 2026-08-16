@@ -52,7 +52,7 @@ $(STAMPDIR)/libyang: | $(STAMPDIR)
 .PHONY: clean-libyang
 clean-libyang:
 	$(call make_cmd,src,$(@))
-	$(RM) $(STAMPDIR)/$(subst clobber-,,$(@))
+	$(RM) $(STAMPDIR)/$(subst clean-,,$(@))
 
 .PHONY: sample
 sample: $(STAMPDIR)/libsmartcols $(STAMPDIR)/readline $(STAMPDIR)/sysrepo #$(STAMPDIR)/nghttp2 $(STAMPDIR)/netopeer2
@@ -122,7 +122,7 @@ $(STAMPDIR)/sysrepo: $(STAMPDIR)/libyang | $(SRCDIR)/sysrepo/ $(STAMPDIR)/ $(BUI
 	  -DFACTORY_DEFAULT_DATA_PATH='$(STAGEDIR)/var/lib/sysrepo/factory' \
 	  -DSTARTUP_DATA_PATH='$(STAGEDIR)/var/lib/sysrepo/startup' \
 	  -DNOTIFICATION_PATH='$(STAGEDIR)/var/lib/sysrepo/notif' \
-	  -DYANG_MODULE_PATH='$(STAGEDIR)/var/lib/sysrepo/yang' \
+	  -DYANG_MODULE_PATH='$(STAGEDIR)/share/yang' \
 	  \
 	  -DSYSREPO_UMASK='00077' \
 	  -DSYSREPO_GROUP='$(CURGROUP)' \
@@ -131,6 +131,14 @@ $(STAMPDIR)/sysrepo: $(STAMPDIR)/libyang | $(SRCDIR)/sysrepo/ $(STAMPDIR)/ $(BUI
 	$(MKDIR) --parents --mode=700 '$(STAGEDIR)/var/lib/sysrepo'
 	$(MKDIR) --parents --mode=700 '$(STAGEDIR)/var/lib/sysrepo/factory'
 	$(TOUCH) $(@)
+.PHONY: clean-sysrepo
+clean-sysrepo:
+	$(RM) -f /dev/shm/sr_*
+	if [ -f "$(BUILDDIR)/$(subst clean-,,$(@))/install_manifest.txt" ]; then \
+		xargs $(RM) < $(BUILDDIR)/$(subst clean-,,$(@))/install_manifest.txt; \
+	fi
+	$(RM) -r $(BUILDDIR)/$(subst clean-,,$(@))
+	$(RM) $(STAMPDIR)/$(subst clean-,,$(@))
 $(SRCDIR)/sysrepo/: $(DOWNDIR)/$(SYSREPO_TARBALL_BASE) | $(SRCDIR)/
 	$(call untar_cmd,$(@),$(<))
 $(DOWNDIR)/$(SYSREPO_TARBALL_BASE): | $(DOWNDIR)/
@@ -263,8 +271,8 @@ $(DOWNDIR)/$(NETTOPEER2_TARBALL_BASE): | $(DOWNDIR)/
 
 .PHONY: dev
 dev:
-	$(CTAGS) -f $(OUTBASE)/tags -R $(SRCDIR)
-	cd $(SRCDIR) && $(CSCOPE) -f$(OUTBASE)/cscope.out -bqR
+	$(CTAGS) -f $(OUTBASE)/tags -R $(SRCDIR) $(CURDIR)/src
+	$(CSCOPE) -f$(OUTBASE)/cscope.out -bq $$(find $(SRCDIR) $(CURDIR)/src -type f -name "*.[ch]")
 
 .PHONY: clean
 clean:
@@ -285,10 +293,6 @@ dist-sample:
 distclean: clobber distclean-sample
 distclean-sample:
 	$(call make_cmd,$(patsubst distclean-%,%,$(@)),distclean)
-
-.PHONY: clean-shm
-clean-shm: clean
-	$(RM) -f /dev/shm/sr_*
 
 #
 # Directory rules

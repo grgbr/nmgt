@@ -1,0 +1,39 @@
+module oven-cly {
+	yang-version 1.1;
+	namespace "urn:sysrepo:oven-cly";
+	prefix ov-cly;
+
+	import oven {
+		prefix ov;
+	}
+
+	import cly-extensions {
+		prefix cly-ext;
+	}
+
+	revision 2026-08-06 {
+		description "Initial revision.";
+	}
+
+	augment "/cly-ext:services" {
+		container oven {
+			config false;
+			cly-ext:ignore;
+			description "Command line oven menu directory entry.";
+		}
+	}
+
+	augment "/ov:oven" {
+		cly-ext:menu "/cly-ext:services/ov-cly:oven";
+		cly-ext:show-config-command "config" {
+			description "Show oven configuration settings.";
+		}
+	}
+
+	augment "/ov:oven-state" {
+		cly-ext:menu "/cly-ext:services/ov-cly:oven";
+		cly-ext:show-state-command "status" {
+			description "Show oven operational state.";
+		}
+	}
+}

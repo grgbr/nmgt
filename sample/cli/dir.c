@@ -498,7 +498,7 @@ cli_dir_init(struct cli_dir *  directory,
 	cli_assert((type == CLI_DIR_NONE_TYPE) ||
 	           (type == CLI_DIR_MOD_TYPE) ||
 	           (type == CLI_DIR_NODE_TYPE));
-	cli_assert((type == CLI_DIR_NONE_TYPE) || schema);
+	cli_assert((type == CLI_DIR_NONE_TYPE) ^ !!schema);
 
 	size_t len;
 	int    ret;
@@ -569,7 +569,13 @@ cli_dir_destroy(struct cli_dir * directory)
 	cli_free(directory);
 }
 
-int
+/* Keep this just in case we would need it in the future. */
+#if 0
+/*
+ * Create a new directory identified by `path' relatively to `directory'.
+ * The newly created directory is returned into `directory'.
+ */
+static int
 cli_dir_make(struct cli_dir ** directory,
              const char *      path,
              enum cli_dir_type type,
@@ -581,7 +587,7 @@ cli_dir_make(struct cli_dir ** directory,
 	cli_assert((type == CLI_DIR_NONE_TYPE) ||
 	           (type == CLI_DIR_MOD_TYPE) ||
 	           (type == CLI_DIR_NODE_TYPE));
-	cli_assert((type == CLI_DIR_NONE_TYPE) || schema);
+	cli_assert((type == CLI_DIR_NONE_TYPE) ^ !!schema);
 
 	if (*path != '\0') {
 		struct cli_path              pth;
@@ -662,8 +668,9 @@ fini:
 	else
 		return -ENODATA;
 }
+#endif
 
-static int
+int
 cli_dir_make_child(struct cli_dir ** dir,
                    const char *      name,
                    enum cli_dir_type type,
@@ -699,15 +706,19 @@ out:
 }
 
 struct cli_dir *
-cli_dir_make_from_node(const struct lysc_node *  node,
-                       struct cli_dir *          root,
-                       const struct lys_module * module)
+cli_dir_make_from_node(const struct lysc_node * node,
+                       struct cli_dir *         root,
+                       enum cli_dir_type        type,
+                       const void *             schema)
 {
 	cli_assert(node);
 	cli_assert((node->nodetype == LYS_CONTAINER) ||
 	           (node->nodetype == LYS_LIST));
-	cli_assert(module);
-	cli_assert(node->parent || (node->module == module));
+	cli_assert((type == CLI_DIR_NONE_TYPE) ||
+	           (type == CLI_DIR_MOD_TYPE) ||
+	           (type == CLI_DIR_NODE_TYPE));
+	cli_assert((type == CLI_DIR_NONE_TYPE) ^ !!schema);
+	cli_assert((node != schema) || (type == CLI_DIR_NODE_TYPE));
 
 	const struct lysc_node ** comps;
 	const struct lysc_node *  scn = node;
@@ -733,16 +744,20 @@ cli_dir_make_from_node(const struct lysc_node *  node,
 		comps[cnt++] = scn;
 	}
 
+#if 0
 	/*
 	 * Now create the top-level directory related to the module given in
 	 * argument.
 	 * Top-level node owner module should be the one that is given in
 	 * argument.
 	 */
-	cli_assert(scn->module == module);
-	err = cli_dir_make_child(&root, module->name, CLI_DIR_MOD_TYPE, module);
+	err = cli_dir_make_child(&root,
+	                         scn->module->name,
+	                         CLI_DIR_MOD_TYPE,
+	                         scn->module);
 	if (err)
 		goto free;
+#endif
 
 	/*
 	 * Iterate over stacked parent nodes in reverse order and create
@@ -759,7 +774,7 @@ cli_dir_make_from_node(const struct lysc_node *  node,
 	}
 
 	/* Finally, create directory for `node' given in argument. */
-	err = cli_dir_make_child(&root, node->name, CLI_DIR_NODE_TYPE, node);
+	err = cli_dir_make_child(&root, node->name, type, schema);
 	if (err)
 		goto free;
 

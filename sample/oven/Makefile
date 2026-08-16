@@ -16,12 +16,14 @@ all: build
 install: $(DESTDIR)$(PREFIX)/sbin/ovend \
          $(DESTDIR)$(PREFIX)/bin/oven-ctl \
          $(DESTDIR)$(PREFIX)/bin/oven-wait
-$(DESTDIR)$(PREFIX)/sbin/ovend: $(BUILDDIR)/ovend oven.yang oven-cli.yang
-	$(INSTALL) --mode=755 -D $(<) $(@)
+$(DESTDIR)$(PREFIX)/sbin/ovend: $(BUILDDIR)/ovend oven.yang oven-cly.yang
 	# Watch out ! Sysrepo /dev/shm entries must be cleaned up before
 	# oven.yang install (see <topdir>/notes.txt)
+	$(PREFIX)/sbin/sysrepoctl -u oven-cly.yang 2>/dev/null || true
+	$(PREFIX)/sbin/sysrepoctl -u oven.yang 2>/dev/null || true
 	$(PREFIX)/sbin/sysrepoctl -i oven.yang
-	$(PREFIX)/sbin/sysrepoctl -i oven-cli.yang
+	$(PREFIX)/sbin/sysrepoctl -i oven-cly.yang
+	$(INSTALL) --mode=755 -D $(<) $(@)
 $(DESTDIR)$(PREFIX)/bin/oven-wait: $(BUILDDIR)/oven-wait oven.yang
 	$(INSTALL) --mode=755 -D $(<) $(@)
 $(DESTDIR)$(PREFIX)/bin/oven-ctl: ctl.sh

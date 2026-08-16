@@ -130,11 +130,6 @@ cli_show_exec_work(struct cli_work * work, struct cli_context * context)
 	if (ret)
 		return ret;
 
-	if (cli_dir_type(dir) != CLI_DIR_NODE_TYPE) {
-		cli_cmd_log(&cmd->super, "no such data.");
-		return -ENOMSG;
-	}
-
 	/*
 	 * Given the directory descriptor found above, display its state related
 	 * informations.
@@ -305,7 +300,6 @@ cli_show_create_cmd(struct cli_show_cmd **             command,
 {
 	cli_assert(command);
 	cli_dir_assert(directory);
-	cli_assert(cli_dir_type(directory) == CLI_DIR_NODE_TYPE);
 	cli_assert(container);
 	cli_assert(cli_cmd_name_isok(name));
 	cli_assert(filter);
@@ -378,7 +372,6 @@ cli_show_make_cmd(struct cli_dir *                   directory,
                   const struct cli_context *         context)
 {
 	cli_dir_assert(directory);
-	cli_assert(cli_dir_type(directory) == CLI_DIR_NODE_TYPE);
 	cli_assert(container);
 	cli_assert(name);
 	cli_assert(filter);
@@ -437,7 +430,6 @@ cli_show_make_config_cmd(struct cli_dir *                   directory,
                          const struct cli_context *         context)
 {
 	cli_dir_assert(directory);
-	cli_assert(cli_dir_type(directory) == CLI_DIR_NODE_TYPE);
 	cli_assert(container);
 	cli_assert(name);
 	cli_assert_context(context);
@@ -457,7 +449,6 @@ cli_show_make_oper_cmd(struct cli_dir *                   directory,
                        const struct cli_context *         context)
 {
 	cli_dir_assert(directory);
-	cli_assert(cli_dir_type(directory) == CLI_DIR_NODE_TYPE);
 	cli_assert(container);
 	cli_assert(name);
 	cli_assert_context(context);

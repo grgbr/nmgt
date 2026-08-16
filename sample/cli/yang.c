@@ -167,8 +167,8 @@ cli_lysc_is_extension(const struct lysc_ext_instance * extension,
 	const struct lysc_ext *   def = extension->def;
 	const struct lys_module * mod = def->module;
 
-	return !strcmp(mod->name, "cli-extensions") &&
-	       !strcmp(mod->ns, "urn:cli:yang:cli-extensions") &&
+	return !strcmp(mod->name, "cly-extensions") &&
+	       !strcmp(mod->ns, "urn:cly:yang:cly-extensions") &&
 	       !(def->flags & LYS_STATUS_DEPRC) &&
 	       !strcmp(def->name, identifier);
 }

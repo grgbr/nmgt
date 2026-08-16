@@ -4,68 +4,143 @@
 #include "yang.h"
 
 static int
-cli_build_handle_container(struct cli_context *       context,
-                           const struct lysc_node *   node,
-                           const struct lys_module *  module)
+cli_build_ext_cmd(const struct cli_context *  context,
+                  struct cli_dir *            directory,
+                  const struct lysc_node *    node,
+                  const struct lysc_cly_cmd * command)
 {
-	struct cli_dir * dir = NULL;
-	int              err;
+	cli_assert_context(context);
+	cli_dir_assert(directory);
+	cli_assert(node);
+	cli_assert(command);
+	cli_assert(command->name);
 
-#if 0
-	const struct lysc_ext_instance * ext;
+	int ret;
 
-#warning What to do when multiple cliext statement are there ?!!!
-	cli_lysc_foreach_extension(node->exts, ext) {
-		if (cli_lysc_is_extension(ext, "dirref")) {
-			dir = build->parent;
-			err = cli_dir_search((const struct cli_dir **)&dir,
-			                     ext->argument);
-			if (err) {
-				msg = "cannot find extension directory entry";
-				path = ext->argument;
-				goto err;
-			}
+	switch (command->kind) {
+	case LYSC_CLY_SHOW_CONFIG_CMD_KIND:
+		ret = cli_show_make_config_cmd(
+			directory,
+			(const struct lysc_node_container *)node,
+			command->name,
+			context);
+		break;
 
-			break;
-		}
+	case LYSC_CLY_SHOW_STATE_CMD_KIND:
+		ret = cli_show_make_oper_cmd(
+			directory,
+			(const struct lysc_node_container *)node,
+			command->name,
+			context);
+		break;
 
-		if (cli_lysc_is_extension(ext, "mkdir")) {
-			dir = build->parent;
-			err = cli_dir_make(&dir,
-			                   ext->argument,
-			                   CLI_DIR_NODE_TYPE,
-			                   node);
-			if (err) {
-				msg = "cannot create extension directory entry";
-				path = ext->argument;
-				goto err;
-			}
+	case LYSC_CLY_SET_CONFIG_CMD_KIND:
+		/* Implement me ! */
+		assert(0);
 
-			break;
-		}
+	default:
+		assert(0);
 	}
 
-#warning What to do when no cliext statement is there ?!!!
-	if (!dir) {
-		dir = cli_dir_create_node(node->name, node);
-		if (!dir) {
-			msg = "cannot create directory entry.";
-			path = node->name;
-			err = -errno;
-			goto err;
-		}
+	return ret;
+}
 
-		cli_dir_add_child(build->parent, dir);
-	}
-#endif
+static int
+cli_build_handle_container(struct cli_context *     context,
+                           const struct lysc_node * node)
+{
+	struct lysc_cly          cly;
+	ly_bool                  has_cly;
+	const struct lysc_node * menu = NULL;
+	struct cli_dir *         dir;
+	int                      err;
 
-	dir = cli_dir_make_from_node(node, &context->root, module);
-	if (!dir) {
-		err = errno;
+	/* Probe for YANG cly extension set. */
+	err = lysc_cly_load(node, &cly);
+	if (err != LY_SUCCESS) {
 		cli_lysc_log(node,
-		             "cannot create directory entry: %s.",
-		             cli_dir_strerror(err));
-		return -err;
+		             "cannot process menu entry: %s.",
+		             ly_strerr(err));
+		return -EBADR;
+	}
+
+	has_cly = lysc_cly_exists(&cly);
+	if (has_cly) {
+		/* A set of YANG cly extensions is present... */
+
+		if (lysc_cly_is_ignored(&cly))
+			/* ...but it has been requested to be ignored. */
+			return 0;
+
+		/*
+		 * Retrieve menu node: subsequent commands will be attached
+		 * to it.
+		 */
+		menu = lysc_cly_get_menu(&cly);
+		cli_assert(menu);
+	}
+
+	if (!menu) {
+		/*
+		 * Create a menu directory hierarchy described by the node's
+		 * YANG path rooted under its module related directory menu
+		 * entry.
+		 */
+		struct cli_dir * root = &context->root;
+
+		/*
+		 * Create the top-level directory related to the module owning
+		 * the node.
+		 */
+		err = cli_dir_make_child(&root,
+		                         node->module->name,
+		                         CLI_DIR_MOD_TYPE,
+		                         node->module);
+		if (err)
+			goto nodir;
+
+		/*
+		 * Then, create the menu directory entry hierarchy related to
+		 * the node underneath.
+		 */
+		dir = cli_dir_make_from_node(node,
+		                             root,
+		                             CLI_DIR_NODE_TYPE,
+		                             node);
+	}
+	else {
+		/*
+		 * Create the menu directory hierarchy as requested by the cly
+		 * extensions under our root directory entry.
+		 */
+		dir = cli_dir_make_from_node(menu,
+		                             &context->root,
+		                             CLI_DIR_MOD_TYPE,
+		                             node->module);
+	}
+	if (!dir) {
+		err = -errno;
+		goto nodir;
+	}
+
+	/*
+	 * Eventually, create and attach commands to the menu directory entry
+	 * just created.
+	 */
+	if (has_cly) {
+		/*
+		 * Instantiate commands defined by the YANG cly extensions
+		 * found.
+		 */
+		const struct lysc_cly_cmd * cmd;
+
+		lysc_cly_foreach_command(&cly, cmd) {
+			err = cli_build_ext_cmd(context, dir, node, cmd);
+			if (err)
+				return err;
+		}
+
+		return 0;
 	}
 
 	err = cli_show_make_config_cmd(dir,
@@ -83,26 +158,31 @@ cli_build_handle_container(struct cli_context *       context,
 		return err;
 
 	return 0;
+
+nodir:
+	cli_lysc_log(node,
+	             "cannot create directory entry: %s.",
+	             cli_dir_strerror(-err));
+
+	return err;
 }
 
 static int
 cli_build_tree_dir(struct cli_context *     context,
                    const struct lysc_node * node,
                    enum cli_walk_event      event,
-                   void *                   data)
+                   void *                   data __cli_unused)
 {
 	cli_assert_context(context);
 	cli_assert(node);
 	cli_assert((event == CLI_WALK_PRE_EVT) || (event == CLI_WALK_POST_EVT));
-	cli_assert(data);
 
-	const struct lys_module * mod = data;
-	int                       ret;
+	int ret;
 
 	switch (node->nodetype) {
 	case LYS_CONTAINER:
 		if (event == CLI_WALK_PRE_EVT) {
-			ret = cli_build_handle_container(context, node, mod);
+			ret = cli_build_handle_container(context, node);
 			if (ret)
 				return ret;
 		}
@@ -190,7 +270,7 @@ cli_build_from_schema(struct cli_context * context)
 			ret = cli_lys_walk_module(context,
 			                          mod,
 			                          cli_build_tree_dir,
-			                          (void *)mod);
+			                          NULL);
 			if (ret)
 				return ret;
 		}

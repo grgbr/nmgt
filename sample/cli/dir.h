@@ -60,6 +60,8 @@ cli_dir_strerror(int error)
 	switch (error) {
 	case ENOENT:
 		return "no such directory";
+	case EEXIST:
+		return "directory exists";
 	case EBADR:
 		return "internal YANG error";
 	default:
@@ -208,47 +210,20 @@ cli_dir_fini_root(struct cli_dir * root);
 extern struct cli_dir *
 cli_dir_create(const char * name, enum cli_dir_type type, const void * schema);
 
-static inline struct cli_dir *
-cli_dir_create_none(const char * name)
-{
-	cli_assert(name);
-
-	return cli_dir_create(name, CLI_DIR_NONE_TYPE, NULL);
-}
-
-static inline struct cli_dir *
-cli_dir_create_node(const char * name, const struct lysc_node * node)
-{
-	cli_assert(name);
-
-	return cli_dir_create(name, CLI_DIR_NODE_TYPE, node);
-}
-
-static inline struct cli_dir *
-cli_dir_create_module(const char * name, const struct lys_module * module)
-{
-	cli_assert(name);
-
-	return cli_dir_create(name, CLI_DIR_MOD_TYPE, module);
-}
-
 extern void
 cli_dir_destroy(struct cli_dir * directory);
 
-/*
- * Create a new directory identified by `path' relatively to `directory'.
- * The newly created directory is returned into `directory'.
- */
 extern int
-cli_dir_make(struct cli_dir ** directory,
-             const char *      path,
-             enum cli_dir_type type,
-             const void *      schema);
+cli_dir_make_child(struct cli_dir ** dir,
+                   const char *      name,
+                   enum cli_dir_type type,
+                   const void *      schema);
 
 struct cli_dir *
 cli_dir_make_from_node(const struct lysc_node *  node,
                        struct cli_dir *          root,
-                       const struct lys_module * module);
+                       enum cli_dir_type         type,
+                       const void *              schema);
 
 /******************************************************************************
  * Directory search logic for commands usage.
