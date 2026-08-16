@@ -53,14 +53,14 @@ cli_build_handle_container(struct cli_context *     context,
 	ly_bool                  has_cly;
 	const struct lysc_node * menu = NULL;
 	struct cli_dir *         dir;
-	int                      err;
+	int                      ret;
 
 	/* Probe for YANG cly extension set. */
-	err = lysc_cly_load(node, &cly);
-	if (err != LY_SUCCESS) {
+	ret = lysc_cly_load(node, &cly);
+	if (ret != LY_SUCCESS) {
 		cli_lysc_log(node,
 		             "cannot process menu entry: %s.",
-		             ly_strerr(err));
+		             ly_strerr(ret));
 		return -EBADR;
 	}
 
@@ -70,7 +70,7 @@ cli_build_handle_container(struct cli_context *     context,
 
 		if (lysc_cly_is_ignored(&cly))
 			/* ...but it has been requested to be ignored. */
-			return 0;
+			goto unload;
 
 		/*
 		 * Retrieve menu node: subsequent commands will be attached
@@ -92,11 +92,11 @@ cli_build_handle_container(struct cli_context *     context,
 		 * Create the top-level directory related to the module owning
 		 * the node.
 		 */
-		err = cli_dir_make_child(&root,
+		ret = cli_dir_make_child(&root,
 		                         node->module->name,
 		                         CLI_DIR_MOD_TYPE,
 		                         node->module);
-		if (err)
+		if (ret)
 			goto nodir;
 
 		/*
@@ -119,7 +119,7 @@ cli_build_handle_container(struct cli_context *     context,
 		                             node->module);
 	}
 	if (!dir) {
-		err = -errno;
+		ret = -errno;
 		goto nodir;
 	}
 
@@ -135,36 +135,41 @@ cli_build_handle_container(struct cli_context *     context,
 		const struct lysc_cly_cmd * cmd;
 
 		lysc_cly_foreach_command(&cly, cmd) {
-			err = cli_build_ext_cmd(context, dir, node, cmd);
-			if (err)
-				return err;
+			ret = cli_build_ext_cmd(context, dir, node, cmd);
+			if (ret)
+				goto unload;
 		}
+	}
+	else {
+		ret = cli_show_make_config_cmd(
+			dir,
+			(const struct lysc_node_container *)node,
+			"config",
+			context);
+		if (ret)
+			goto unload;
 
-		return 0;
+		ret = cli_show_make_oper_cmd(
+			dir,
+			(const struct lysc_node_container *)node,
+			"status",
+			context);
+		if (ret)
+			goto unload;
 	}
 
-	err = cli_show_make_config_cmd(dir,
-	                               (const struct lysc_node_container *)node,
-	                               "config",
-	                               context);
-	if (err)
-		return err;
-
-	err = cli_show_make_oper_cmd(dir,
-	                             (const struct lysc_node_container *)node,
-	                             "status",
-	                             context);
-	if (err)
-		return err;
+	lysc_cly_unload(&cly);
 
 	return 0;
 
 nodir:
 	cli_lysc_log(node,
-	             "cannot create directory entry: %s.",
-	             cli_dir_strerror(-err));
+	             "cannot create menu directory entry: %s.",
+	             cli_dir_strerror(-ret));
+unload:
+	lysc_cly_unload(&cly);
 
-	return err;
+	return ret;
 }
 
 static int
