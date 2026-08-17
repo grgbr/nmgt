@@ -359,6 +359,7 @@ cli_show_create_cmd(struct cli_show_cmd **             command,
 
 free:
 	cli_free(tbl);
+	cli_free(cmd);
 
 	return err;
 }
