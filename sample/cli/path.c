@@ -606,17 +606,14 @@ int
 cli_path_isok(const char * path)
 {
 	cli_assert(path);
+	cli_assert(path[0] != '\0');
 
-	if (*path != '\0') {
-		struct cli_path pth;
-		int             ret;
+	struct cli_path pth;
+	int             ret;
 
-		cli_path_init(&pth);
-		ret = cli_path_parse(&pth, path);
-		cli_path_fini(&pth);
+	cli_path_init(&pth);
+	ret = cli_path_parse(&pth, path);
+	cli_path_fini(&pth);
 
-		return ret;
-	}
-	else
-		return 0;
+	return ret;
 }

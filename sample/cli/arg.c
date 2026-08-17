@@ -417,21 +417,33 @@ cli_arg_complete_kword_term(const struct cli_arg_kword_term * terminal,
 	}
 }
 
+static bool
+cli_arg_kwork_already_completed(const struct cli_arg_kword_parm * parm,
+                                int                               argc,
+                                const char * const                argv[])
+{
+	cli_arg_assert_kword_parm(parm);
+
+	int a;
+
+	for (a = 0; a < argc; a++) {
+		const char * arg = argv[a];
+
+		if (!strncmp(arg, parm->super.name, parm->super.len) &&
+		    arg[parm->super.len] == '=')
+			return true;
+	}
+
+	return false;
+}
+
 static void
-cli_arg_complete_kword_parm(const struct cli_arg * argument,
-                            const struct cli_cmd * command __cli_unused,
-                            const struct cli_dir * directory __cli_unused,
-                            struct cli_context *   context __cli_unused,
-                            const char *           word,
-                            size_t                 length,
-                            int                    argc __cli_unused,
-                            const char * const     argv[] __cli_unused,
-                            struct cli_match *     matches)
+_cli_arg_complete_kword_parm(const struct cli_arg * argument,
+                             const char *           word,
+                             size_t                 length,
+                             struct cli_match *     matches)
 {
 	cli_arg_assert_kword_parm((const struct cli_arg_kword_parm *)argument);
-	cli_cmd_assert(command);
-	cli_dir_assert(directory);
-	cli_assert_context(context);
 	cli_match_assert(matches);
 
 	const struct cli_arg_kword_parm * parm =
@@ -480,6 +492,30 @@ cli_arg_complete_kword_parm(const struct cli_arg * argument,
 				cli_arg_display_kword_list,
 				(void *)parm);
 	}
+}
+
+static void
+cli_arg_complete_kword_parm(const struct cli_arg * argument,
+                            const struct cli_cmd * command __cli_unused,
+                            const struct cli_dir * directory __cli_unused,
+                            struct cli_context *   context __cli_unused,
+                            const char *           word,
+                            size_t                 length,
+                            int                    argc __cli_unused,
+                            const char * const     argv[] __cli_unused,
+                            struct cli_match *     matches)
+{
+	cli_arg_assert_kword_parm((const struct cli_arg_kword_parm *)argument);
+	cli_cmd_assert(command);
+	cli_dir_assert(directory);
+	cli_assert_context(context);
+	cli_match_assert(matches);
+
+	const struct cli_arg_kword_parm * parm =
+		(const struct cli_arg_kword_parm *)argument;
+
+	if (!cli_arg_kwork_already_completed(parm, argc, argv))
+		_cli_arg_complete_kword_parm(argument, word, length, matches);
 }
 
 static const struct cli_arg_ops cli_arg_kword_parm_ops = {

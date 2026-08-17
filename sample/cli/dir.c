@@ -972,7 +972,6 @@ cli_dir_push_match(struct cli_match * matches, const char * dir_name)
 {
 	cli_match_assert(matches);
 	cli_assert(!cli_path_isok(dir_name));
-	cli_assert(dir_name[0] != '\0');
 	cli_assert(dir_name[strlen(dir_name) - 1] == '/');
 
 	char * path;
@@ -1005,7 +1004,6 @@ cli_dir_generate_matches(const struct cli_dir * directory,
 {
 	cli_dir_assert(directory);
 	cli_assert(!normalized || !cli_path_isok(normalized));
-	cli_assert(!normalized || (normalized[0] != '\0'));
 	cli_assert(!normalized || (normalized[strlen(normalized) - 1] == '/'));
 	cli_match_assert(matches);
 
@@ -1040,7 +1038,6 @@ cli_dir_generate_named_matches(const struct cli_dir * directory,
 {
 	cli_dir_assert(directory);
 	cli_assert(!normalized || !cli_path_isok(normalized));
-	cli_assert(!normalized || (normalized[0] != '\0'));
 	cli_assert(!normalized || (normalized[strlen(normalized) - 1] == '/'));
 	cli_assert(base_name);
 	cli_assert(base_length);
@@ -1155,20 +1152,25 @@ fini:
 	return ret;
 }
 
-static void
-cli_dir_work_complete_arg(const struct cli_arg * argument __cli_unused,
-                          const struct cli_cmd * command __cli_unused,
-                          const struct cli_dir * directory __cli_unused,
-                          struct cli_context *   context,
-                          const char *           word,
-                          size_t                 length,
-                          int                    argc __cli_unused,
-                          const char * const     argv[] __cli_unused,
-                          struct cli_match *     matches)
+static bool
+cli_dir_work_already_completed(int argc, const char * const argv[])
 {
-	cli_arg_assert(argument);
-	cli_cmd_assert(command);
-	cli_dir_assert(directory);
+	int a;
+
+	for (a = 0; a < argc; a++) {
+		if (!cli_path_isok(argv[a]))
+			return true;
+	}
+
+	return false;
+}
+
+static void
+_cli_dir_work_complete_arg(struct cli_context * context,
+                           const char *         word,
+                           size_t               length,
+                           struct cli_match *   matches)
+{
 	cli_assert_context(context);
 	cli_match_assert(matches);
 
@@ -1236,6 +1238,33 @@ cli_dir_work_complete_arg(const struct cli_arg * argument __cli_unused,
 		cli_dir_generate_matches(pdir, NULL, matches);
 
 	rl_filename_completion_desired = 1;
+}
+
+static void
+cli_dir_work_complete_arg(const struct cli_arg * argument __cli_unused,
+                          const struct cli_cmd * command __cli_unused,
+                          const struct cli_dir * directory __cli_unused,
+                          struct cli_context *   context,
+                          const char *           word,
+                          size_t                 length,
+                          int                    argc,
+                          const char * const     argv[],
+                          struct cli_match *     matches)
+{
+	cli_arg_assert(argument);
+	cli_cmd_assert(command);
+	cli_dir_assert(directory);
+	cli_assert_context(context);
+	cli_match_assert(matches);
+
+	/*
+	 * Generate possible completion pathes only when a path has not been
+	 * completed within the previous command line words.
+	 * In other words, a path completion may only be performed once for the
+	 * current command line.
+	 */
+	if (!cli_dir_work_already_completed(argc, argv))
+		_cli_dir_work_complete_arg(context, word, length, matches);
 }
 
 static const struct cli_arg_ops cli_dir_work_arg_ops = {

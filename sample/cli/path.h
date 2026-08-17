@@ -163,7 +163,6 @@ cli_path_destroy(struct cli_path * path);
 extern ssize_t
 cli_path_normalize(const char * path, char * norm, size_t size);
 
-#warning Remove calls to cli_path_isok() and replace calls with cli_path_parse()
 extern int
 cli_path_isok(const char * string);
 

@@ -27,6 +27,12 @@ struct cli_match {
 		.data = NULL \
 	}
 
+#define cli_match_foreach(_matches, _indx, _match) \
+	for (_indx = 0; \
+	     ((_indx) < (_matches)->cnt) && \
+	     (_match = (_matches)->data[_indx]); \
+	     (_indx)++)
+
 static inline unsigned int
 cli_match_count(const struct cli_match * matches)
 {
