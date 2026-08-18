@@ -2,3 +2,5 @@
   is expected and one directory has already been completed in the current
   command line.
 * refactor status / config / counters commands code...
+
+* scols table: implement header repeat when no paged thanks to scols_table_enable_header_repeat ()

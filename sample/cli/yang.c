@@ -271,11 +271,11 @@ cli_lysc_print_nodeset_diag(const struct cli_context * context,
  ******************************************************************************/
 
 int
-cli_lyd_load(const struct cli_context * context,
-             const char *               xpath,
-             unsigned int               depth,
-             sr_get_oper_flag_t         flags,
-             sr_data_t **               data)
+cli_lyd_load_data(const struct cli_context * context,
+                  const char *               xpath,
+                  unsigned int               depth,
+                  sr_get_oper_flag_t         flags,
+                  sr_data_t **               data)
 {
 	cli_assert_context(context);
 	cli_assert(xpath);
@@ -291,27 +291,28 @@ cli_lyd_load(const struct cli_context * context,
 	                  0,
 	                  flags,
 	                  data);
-	if (err != SR_ERR_OK)
+	if (err != SR_ERR_OK) {
+		if (err == SR_ERR_NOT_FOUND)
+			/* Path is invalid: no nodes will ever match it. */
+			err = SR_ERR_INVAL_ARG;
 		return err;
+	}
 
 	if (!*data)
+		/* Valid path but no corresponding data subtree found. */
 		return SR_ERR_NOT_FOUND;
 
-	if (!(*data)->tree) {
-		sr_release_data(*data);
-		*data = NULL;
-		return SR_ERR_NOT_FOUND;
-	}
+	cli_assert((*data)->tree);
 
 	return SR_ERR_OK;
 }
 
 int
-cli_lyd_load_from_schema(const struct cli_context * context,
-                         const struct lysc_node *   node,
-                         unsigned int               depth,
-                         sr_get_oper_flag_t         flags,
-                         sr_data_t **               data)
+cli_lyd_load_data_from_schema(const struct cli_context * context,
+                              const struct lysc_node *   node,
+                              unsigned int               depth,
+                              sr_get_oper_flag_t         flags,
+                              sr_data_t **               data)
 {
 	cli_assert_context(context);
 	cli_assert(node);
@@ -323,7 +324,7 @@ cli_lyd_load_from_schema(const struct cli_context * context,
 	xpath = cli_lysc_node_xpath(node);
 	cli_assert(xpath);
 
-	ret = cli_lyd_load(context, xpath, depth, flags, data);
+	ret = cli_lyd_load_data(context, xpath, depth, flags, data);
 
 	cli_free(xpath);
 
@@ -331,9 +332,64 @@ cli_lyd_load_from_schema(const struct cli_context * context,
 }
 
 int
-cli_lyd_load_node(const struct cli_context * context,
-                  const char *               xpath,
-                  sr_data_t **               data)
+cli_lyd_load_data_subtree(const struct cli_context * context,
+                          const char *               xpath,
+                          sr_data_t **               data)
+{
+	cli_assert_context(context);
+	cli_assert(xpath);
+	cli_assert(xpath[0]);
+	cli_assert(strnlen(xpath, CLI_XPATH_MAX) < CLI_XPATH_MAX);
+	cli_assert(data);
+
+	int err;
+
+	err = sr_get_subtree(context->sess,
+	                     xpath,
+	                     0,
+	                     data);
+	if (err != SR_ERR_OK) {
+		if (err == SR_ERR_NOT_FOUND)
+			/* Path is invalid: no nodes will ever match it. */
+			err = SR_ERR_INVAL_ARG;
+		return err;
+	}
+
+	if (!*data)
+		/* Valid path but no corresponding data subtree found. */
+		return SR_ERR_NOT_FOUND;
+
+	cli_assert((*data)->tree);
+
+	return SR_ERR_OK;
+}
+
+int
+cli_lyd_load_data_subtree_from_schema(const struct cli_context * context,
+                                      const struct lysc_node *   node,
+                                      sr_data_t **               data)
+{
+	cli_assert_context(context);
+	cli_assert(node);
+	cli_assert(data);
+
+	char * xpath;
+	int    ret;
+
+	xpath = cli_lysc_node_xpath(node);
+	cli_assert(xpath);
+
+	ret = cli_lyd_load_data_subtree(context, xpath, data);
+
+	cli_free(xpath);
+
+	return ret;
+}
+
+int
+cli_lyd_load_data_node(const struct cli_context * context,
+                       const char *               xpath,
+                       sr_data_t **               data)
 {
 	cli_assert_context(context);
 	cli_assert(xpath);
@@ -354,9 +410,9 @@ cli_lyd_load_node(const struct cli_context * context,
 }
 
 int
-cli_lyd_load_node_from_schema(const struct cli_context * context,
-                              const struct lysc_node *   node,
-                              sr_data_t **               data)
+cli_lyd_load_data_node_from_schema(const struct cli_context * context,
+                                   const struct lysc_node *   node,
+                                   sr_data_t **               data)
 {
 	cli_assert_context(context);
 	cli_assert(node);
@@ -368,7 +424,7 @@ cli_lyd_load_node_from_schema(const struct cli_context * context,
 	xpath = cli_lysc_node_xpath(node);
 	cli_assert(xpath);
 
-	ret = cli_lyd_load_node(context, xpath, data);
+	ret = cli_lyd_load_data_node(context, xpath, data);
 
 	cli_free(xpath);
 

@@ -1,8 +1,6 @@
 #include "table.h"
 #include "cli.h"
 
-#define CLI_TABLE_COLUMN_INIT_NR   (2U)
-
 #define cli_table_assert_col_label(_label) \
 	cli_assert(_label); \
 	cli_assert(_label[0] != '\0'); \
@@ -77,6 +75,20 @@ cli_table_cell_set_data(struct libscols_cell * cell, const char * data)
 }
 
 void
+cli_table_line_set_color(struct libscols_line * line, const char * color)
+{
+	cli_assert(line);
+
+	int err;
+
+	err = scols_line_set_color(line, color);
+	if (err) {
+		cli_assert(err == -ENOMEM);
+		abort();
+	}
+}
+
+void
 cli_table_cell_set_color(struct libscols_cell * cell, const char * color)
 {
 	cli_assert(cell);
@@ -84,6 +96,48 @@ cli_table_cell_set_color(struct libscols_cell * cell, const char * color)
 	int err;
 
 	err = scols_cell_set_color(cell, color);
+	if (err) {
+		cli_assert(err == -ENOMEM);
+		abort();
+	}
+}
+
+void *
+cli_table_col_get_userdata(struct libscols_column * column)
+{
+	cli_assert(column);
+
+	struct libscols_cell * head;
+
+	head = scols_column_get_header(column);
+	cli_assert(head);
+
+	return scols_cell_get_userdata(head);
+}
+
+void
+cli_table_col_set_userdata(struct libscols_column * column, void * data)
+{
+	cli_assert(column);
+
+	struct libscols_cell * head;
+	int                    err;
+
+	head = scols_column_get_header(column);
+	cli_assert(head);
+
+	err = scols_cell_set_userdata(head, data);
+	cli_assert(!err);
+}
+
+void
+cli_table_col_set_color(struct libscols_column * column, const char * color)
+{
+	cli_assert(column);
+
+	int err;
+
+	err = scols_column_set_color(column, color);
 	if (err) {
 		cli_assert(err == -ENOMEM);
 		abort();
@@ -133,23 +187,11 @@ cli_table_new_col(const struct cli_table * table,
 	return col;
 }
 
-void
-cli_table_col_set_color(struct libscols_column * column, const char * color)
-{
-	cli_assert(column);
-
-	int err;
-
-	err = scols_column_set_color(column, color);
-	if (err) {
-		cli_assert(err == -ENOMEM);
-		abort();
-	}
-}
-
 struct libscols_line *
 cli_table_new_line(const struct cli_table * table)
 {
+	cli_table_assert(table);
+
 	struct libscols_line * ln;
 
 	ln = scols_table_new_line(table->scols, NULL);
@@ -161,29 +203,43 @@ cli_table_new_line(const struct cli_table * table)
 	return ln;
 }
 
-void
-cli_table_line_set_color(struct libscols_line * line, const char * color)
+void *
+cli_table_get_userdata(struct cli_table * table)
 {
-	cli_assert(line);
+	cli_table_assert(table);
 
-	int err;
+	struct libscols_cell * ttl;
 
-	err = scols_line_set_color(line, color);
-	if (err) {
-		cli_assert(err == -ENOMEM);
-		abort();
-	}
+	ttl = scols_table_get_title(table->scols);
+	cli_assert(ttl);
+
+	return scols_cell_get_userdata(ttl);
 }
 
 void
-cli_table_init(struct cli_table *         table,
-               const struct cli_context * context,
-               bool                       nohead,
-               cli_table_load_fn *        load)
+cli_table_set_userdata(struct cli_table * table, void * data)
+{
+	cli_table_assert(table);
+
+	struct libscols_cell * ttl;
+	int                    err;
+
+	ttl = scols_table_get_title(table->scols);
+	cli_assert(ttl);
+
+	err = scols_cell_set_userdata(ttl, data);
+	cli_assert(!err);
+}
+
+void
+cli_table_init(struct cli_table *           table,
+               const struct cli_context *   context,
+               bool                         nohead,
+               const struct cli_table_ops * opers)
 {
 	cli_assert(table);
 	cli_assert_context(context);
-	cli_assert(load);
+	cli_table_assert_ops(opers);
 
 	struct libscols_table * tbl;
 
@@ -197,7 +253,7 @@ cli_table_init(struct cli_table *         table,
 	scols_table_enable_colors(tbl, (int)cli_has_colors(context));
 	scols_table_enable_noheadings(tbl, nohead);
 
-	table->load = load;
+	table->ops = opers;
 	table->scols = tbl;
 }
 
@@ -205,16 +261,16 @@ void
 cli_table_init_from_desc(struct cli_table *            table,
                          const struct cli_context *    context,
                          const struct cli_table_desc * descriptor,
-                         cli_table_load_fn *           load)
+                         const struct cli_table_ops *  opers)
 {
 	cli_assert(table);
 	cli_assert_context(context);
 	cli_table_assert_desc(descriptor);
-	cli_assert(load);
+	cli_table_assert_ops(opers);
 
 	unsigned int c;
 
-	cli_table_init(table, context, descriptor->nohead, load);
+	cli_table_init(table, context, descriptor->nohead, opers);
 
 	for (c = 0; c < descriptor->nr; c++) {
 		const struct cli_table_column_desc * cdesc;

@@ -52,7 +52,7 @@ cli_show_table(const struct cli_cmd *     command,
 
 	int ret;
 
-	ret = cli_table_load((const struct cli_table *)table, context, NULL);
+	ret = cli_table_load((struct cli_table *)table, context, NULL);
 	if (ret) {
 		cli_cmd_log(command,
 		            "cannot load table data: %s.",
@@ -88,11 +88,11 @@ cli_show_format(const struct cli_cmd *     command,
 	sr_data_t * data;
 	int         ret;
 
-	ret = cli_lyd_load_from_schema(context,
-	                               schema,
-	                               2,
-	                               flags,
-	                               &data);
+	ret = cli_lyd_load_data_from_schema(context,
+	                                    schema,
+	                                    2,
+	                                    flags,
+	                                    &data);
 	if (ret) {
 		cli_cmd_log(command, "cannot load data: %s.", sr_strerror(ret));
 		return -ENOMSG;
@@ -107,7 +107,7 @@ cli_show_format(const struct cli_cmd *     command,
 		ret = -EBADR;
 	}
 
-	cli_lyd_unload(data);
+	cli_lyd_unload_data(data);
 
 	return -EBADR;
 }
@@ -327,7 +327,7 @@ cli_show_create_cmd(struct cli_show_cmd **             command,
 	 * argument.
 	 */
 	tbl = cli_malloc(sizeof(*tbl));
-	err = cli_lyd_table_init(tbl, &container->node, filter, context);
+	err = cli_lyd_table_init(tbl, container, filter, context);
 	if (err) {
 		cli_assert(err == -ENOENT);
 		goto free;

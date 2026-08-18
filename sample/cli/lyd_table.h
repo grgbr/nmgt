@@ -4,6 +4,8 @@
 #include "table.h"
 
 struct lysc_node;
+struct lysc_node_container;
+struct lysc_node_list;
 
 struct cli_lyd_table {
 	struct cli_table super;
@@ -16,10 +18,16 @@ struct cli_lyd_table {
 typedef bool cli_lyd_table_filter_node_fn(const struct lysc_node * node);
 
 extern int
-cli_lyd_table_init(struct cli_lyd_table *         table,
-                   const struct lysc_node *       node,
-                   cli_lyd_table_filter_node_fn * filter,
-                   const struct cli_context *     context);
+cli_lyd_table_init(struct cli_lyd_table *             table,
+                   const struct lysc_node_container * node,
+                   cli_lyd_table_filter_node_fn *     filter,
+                   const struct cli_context *         context);
+
+extern int
+cli_lyd_table_init_list(struct cli_lyd_table *         table,
+                        struct lysc_node_list *        node,
+                        cli_lyd_table_filter_node_fn * filter,
+                        const struct cli_context *     context);
 
 static inline void
 cli_lyd_table_fini(struct cli_lyd_table * table)

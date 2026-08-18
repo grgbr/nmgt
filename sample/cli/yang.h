@@ -106,8 +106,8 @@ cli_lysc_find_node(const struct cli_context * context,
 
 static inline struct ly_set *
 cli_lysc_find_nodeset(const struct cli_context * context,
-                      const struct lysc_node *    subtree,
-                      const char *                xpath)
+                      const struct lysc_node *   subtree,
+                      const char *               xpath)
 {
 	cli_assert_context(context);
 	cli_assert(xpath);
@@ -281,25 +281,21 @@ cli_lys_print_module_diag(const struct cli_context * context,
  * Libyang data handling
  ******************************************************************************/
 
-#define cli_lyd_foreach(_data, _node) \
-	LY_LIST_FOR((_data)->tree, _node)
+/* Get schema node of a data node. */
+static inline const struct lysc_node *
+cli_lyd_schema(const struct lyd_node * node)
+{
+	cli_assert(node);
 
-#define cli_lyd_foreach_child(_data, _child) \
-	LY_LIST_FOR(lyd_child((_data)->tree), child)
+	return lyd_node_schema(node);
+}
 
-extern int
-cli_lyd_load(const struct cli_context * context,
-             const char *               xpath,
-             unsigned int               depth,
-             sr_get_oper_flag_t         flags,
-             sr_data_t **               data);
-
-extern int
-cli_lyd_load_from_schema(const struct cli_context * context,
-                         const struct lysc_node *   node,
-                         unsigned int               depth,
-                         sr_get_oper_flag_t         flags,
-                         sr_data_t **               data);
+/* Get value of a single data node. */
+static inline const char *
+cli_lyd_value(const struct lyd_node * node)
+{
+	return lyd_get_value(node);
+}
 
 /* Get value of a single data node. */
 static inline const char *
@@ -325,20 +321,54 @@ cli_lyd_node_is_default(const sr_data_t * data)
 	return !!lyd_is_default(data->tree);
 }
 
+#define cli_lyd_foreach(_data, _node) \
+	LY_LIST_FOR((_data)->tree, _node)
+
+#define cli_lyd_foreach_child(_data, _child) \
+	LY_LIST_FOR(lyd_child((_data)->tree), child)
+
+/* Load multiple (possibly partial) subtrees identified by XPath. */
+extern int
+cli_lyd_load_data(const struct cli_context * context,
+                  const char *               xpath,
+                  unsigned int               depth,
+                  sr_get_oper_flag_t         flags,
+                  sr_data_t **               data);
+
+/* Load a (possibly partial) subtree identified thanks to a schema node. */
+extern int
+cli_lyd_load_data_from_schema(const struct cli_context * context,
+                              const struct lysc_node *   node,
+                              unsigned int               depth,
+                              sr_get_oper_flag_t         flags,
+                              sr_data_t **               data);
+
+/* Load an entire data subtree identified by XPath. */
+extern int
+cli_lyd_load_data_subtree(const struct cli_context * context,
+                          const char *               xpath,
+                          sr_data_t **               data);
+
+/* Load an entire data subtree identified thanks to a schema node. */
+extern int
+cli_lyd_load_data_subtree_from_schema(const struct cli_context * context,
+                                      const struct lysc_node *   node,
+                                      sr_data_t **               data);
+
 /* Load a single data node identified by XPATH. */
 extern int
-cli_lyd_load_node(const struct cli_context * context,
-                  const char *               xpath,
-                  sr_data_t **               data);
+cli_lyd_load_data_node(const struct cli_context * context,
+                       const char *               xpath,
+                       sr_data_t **               data);
 
 /* Load a single data node identified thanks to a schema node. */
 extern int
-cli_lyd_load_node_from_schema(const struct cli_context * context,
-                              const struct lysc_node *   node,
-                              sr_data_t **               data);
+cli_lyd_load_data_node_from_schema(const struct cli_context * context,
+                                   const struct lysc_node *   node,
+                                   sr_data_t **               data);
 
 static inline void
-cli_lyd_unload(sr_data_t * data)
+cli_lyd_unload_data(sr_data_t * data)
 {
 	/* data may be NULL here. */
 	sr_release_data(data);
