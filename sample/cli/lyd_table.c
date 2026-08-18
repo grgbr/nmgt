@@ -11,9 +11,9 @@ cli_lyd_table_set_node_cell(struct libscols_cell *  cell,
 
 	const char * color;
 
-	cli_table_cell_set_data(cell, lyd_get_value(node));
+	cli_table_cell_set_data(cell, cli_lyd_value(node));
 
-	color = !lyd_is_default(node)
+	color = !cli_lyd_is_default(node)
 	        ? cli_style_get_color(style, CLI_VALUE_STYLE_KIND)
 	        : cli_style_get_color(style, CLI_DEFAULT_STYLE_KIND);
 
@@ -36,47 +36,41 @@ cli_lyd_table_set_err_cell(struct libscols_cell *  cell,
 static int
 cli_lyd_table_load(struct cli_table *         table,
                    const struct cli_context * context,
-                   void *                     data __cli_unused)
+                   void *                     data)
 {
 	cli_lyd_table_assert((const struct cli_lyd_table *)table);
 	cli_assert_context(context);
+	cli_lyd_assert_flags((sr_get_oper_flag_t)data);
 
-	const char *             path;
-	sr_data_t *              dtree;
-	int                      err;
-	unsigned int             l;
-	struct libscols_line *   ln;
+	sr_data_t *            cont;
+	const char * const *   style = cli_get_style(context);
+	int                    err;
+	unsigned int           l;
+	struct libscols_line * ln;
 
-	path = cli_table_get_userdata(table);
-	cli_assert(path);
-
-	err = cli_lyd_load_data(context, path, 2, 0, &dtree);
+	err = cli_lyd_load_data(context,
+	                        cli_table_get_userdata(table),
+	                        2,
+	                        (sr_get_oper_flag_t)data,
+	                        &cont);
 	if (!err) {
 		cli_table_foreach_line(table, l, ln) {
 			const struct lyd_node * leaf;
-			struct libscols_cell *  cell;
-			const char * const *    style = cli_get_style(context);
+			struct libscols_cell *  cell =
+				cli_table_line_get_cell(ln, 1);
 
-			path = cli_table_line_get_userdata(ln);
-			cli_assert(path);
-			err = lyd_find_path(dtree->tree,
-			                    path,
-			                    0,
-			                    (struct lyd_node **)&leaf);
-
-			cell = cli_table_line_get_cell(ln, 1);
-
+			err = cli_lyd_find(cont->tree,
+			                   cli_table_line_get_userdata(ln),
+			                   (struct lyd_node **)&leaf);
 			if (!err)
 				cli_lyd_table_set_node_cell(cell, style, leaf);
 			else
 				cli_lyd_table_set_err_cell(cell, style);
 		}
 
-		cli_lyd_unload_data(dtree);
+		cli_lyd_unload_data(cont);
 	}
 	else {
-		const char * const * style = cli_get_style(context);
-
 		cli_table_foreach_line(table, l, ln)
 			cli_lyd_table_set_err_cell(
 				cli_table_line_get_cell(ln, 1),
@@ -89,6 +83,8 @@ cli_lyd_table_load(struct cli_table *         table,
 static void
 _cli_lyd_table_fini(struct cli_table * table)
 {
+	cli_lyd_table_assert((const struct cli_lyd_table *)table);
+
 	cli_free(cli_table_get_userdata(table));
 }
 
@@ -110,7 +106,6 @@ cli_lyd_table_init(struct cli_lyd_table *             table,
 
 	struct libscols_column * col;
 	const struct lysc_node * child;
-	char *                   path;
 	int                      err;
 
 	cli_table_init(&table->super, context, true, &cli_lyd_table_ops);
@@ -141,12 +136,12 @@ cli_lyd_table_init(struct cli_lyd_table *             table,
 		goto fini;
 	}
 
-	path = cli_lysc_node_xpath((const struct lysc_node *)node);
-	cli_assert(path);
-	cli_table_set_userdata(&table->super, path);
-
-	cli_table_col_set_color(col, cli_style_get_color(cli_get_style(context),
-	                                                 CLI_LABEL_STYLE_KIND));
+	cli_table_set_userdata(&table->super,
+	                       cli_lysc_node_xpath((const struct lysc_node *)
+	                                           node));
+	cli_table_col_set_color(col,
+	                        cli_style_get_color(cli_get_style(context),
+	                                            CLI_LABEL_STYLE_KIND));
 
 	return 0;
 
@@ -156,141 +151,86 @@ fini:
 	return err;
 }
 
-#if 0
-
-static int
+static void
 cli_lyd_table_load_list_entry(const struct cli_table * table,
+                              const char * const *     style,
                               const struct lyd_node *  entry)
 {
 	cli_lyd_table_assert((const struct cli_lyd_table *)table);
 	cli_assert(entry);
 
-	struct libscols_line *   ln;
+	struct libscols_line *   ln = cli_table_new_line(table);
 	unsigned int             c;
 	struct libscols_column * col;
 
-	ln = cli_table_new_line(&table->super);
+	cli_assert(ln);
 
-	cli_table_foreach_col(&table->super, c, col) {
-		const struct lyd_node *  attr;
-		const struct lysc_node * scn;
-		struct libscols_cell *   cell;
+	cli_table_foreach_col(table, c, col) {
+		struct libscols_cell *   cell = cli_table_line_get_cell(ln, c);
+		const struct lyd_node *  leaf;
+		int                      err;
 
-		attr = cli_lyd_get_next_child(entry, attr);
-		scn = cli_lyd_schema(attr);
-		if (scn && (scn->nodetype == LYS_LEAF) && filter(scn)) {
-			cell = cli_table_line_get_cell(ln, c);
-			cli_table_cell_set_data(cell, cli_lyd_value(attr));
-			FINISH ME!!
-		}
+		cli_assert(cell);
+
+		err = cli_lyd_find(entry,
+		                   cli_table_col_get_userdata(col),
+		                   (struct lyd_node **)&leaf);
+		if (!err)
+			cli_lyd_table_set_node_cell(cell, style, leaf);
+		else
+			cli_lyd_table_set_err_cell(cell, style);
 	}
 }
 
+static void
+cli_lyd_table_load_err_entry(const struct cli_table * table,
+                             const char * const *     style)
+{
+	cli_lyd_table_assert((const struct cli_lyd_table *)table);
+
+	struct libscols_line *   ln = cli_table_new_line(table);
+	unsigned int             c;
+	struct libscols_column * col;
+
+	cli_assert(ln);
+
+	cli_table_foreach_col(table, c, col)
+		cli_lyd_table_set_err_cell(cli_table_line_get_cell(ln, c),
+		                           style);
+}
+
 static int
-cli_lyd_table_load_list(const struct cli_table *   table,
+cli_lyd_table_load_list(struct cli_table *         table,
                         const struct cli_context * context,
-                        void *                     data __cli_unused)
+                        void *                     data)
 {
 	cli_lyd_table_assert((const struct cli_lyd_table *)table);
 	cli_assert_context(context);
+	cli_lyd_assert_flags((sr_get_oper_flag_t)data);
 
-	int                ret;
-	struct lysc_node * list;
-	sr_data_t *        data;
+	sr_data_t *          list;
+	const char * const * style = cli_get_style(context);
+	int                  err;
 
-	list = cli_table_get_userdata(&table->super);
-	cli_assert(list);
+	cli_table_remove_lines(table);
 
-	ret = cli_lyd_load_from_schema(context,
-	                               list,
-	                               1,
-	                               SR_OPER_NO_STATE,
-	                               &data);
+	err = cli_lyd_load_data(context,
+	                        cli_table_get_userdata(table),
+	                        2,
+	                        (sr_get_oper_flag_t)data,
+	                        &list);
+	if (!err) {
+		struct lyd_node * entry;
 
-	cli_table_remove_lines(&table->super);
+		cli_lyd_foreach_data(list, entry)
+			cli_lyd_table_load_list_entry(table, style, entry);
 
-	if (!ret) {
-		struct lyd_node *  entry;
-
-		cli_lyd_foreach(data, entry) {
-			cli_lyd_table_load_list_entry(table, entry);
-			const struct lysc_node * scn;
-
-			scn = cli_lyd_schema(entry);
-			if (scn && (scn->nodetype == LYS_LEAF) && filter(scn)) {
-				struct libscols_line *   ln;
-				unsigned int             c;
-				struct libscols_column * col;
-
-				ln = cli_table_new_line(&table->super);
-				cli_table_foreach_col(&table->super, c, col) {
-					struct libscols_cell * cell;
-
-					cell = cli_table_line_get_cell(ln, c);
-					cli_table_cell_set_data(cell,
-					                        cli_lyd_value(entry));
-
-				}
-
-			}
-		}
+		cli_lyd_unload_data(list);
 	}
-	else {
-
-	}
-
-	cli_lyd_unload(data);
+	else
+		cli_lyd_table_load_err_entry(table, style);
 
 	return 0;
-
-
-
-
-
-
-	unsigned int           l;
-	struct libscols_line * ln;
-
-	cli_table_foreach_line(table, l, ln) {
-		const struct lysc_node * scn;
-		sr_data_t *              node;
-		int                      err;
-		struct libscols_cell *   cell;
-		const char * const *     style = cli_get_style(context);
-		const char *             color;
-
-		scn = cli_table_line_get_userdata(ln);
-		cli_assert(scn);
-
-		err = cli_lyd_load_node_from_schema(context, scn, &node);
-		cell = cli_table_line_get_cell(ln, 1);
-		if (!err) {
-			cli_table_cell_set_data(cell, cli_lyd_node_value(node));
-
-			color = !cli_lyd_node_is_default(node)
-			        ? cli_style_get_color(style,
-			                              CLI_VALUE_STYLE_KIND)
-			        : cli_style_get_color(style,
-			                              CLI_DEFAULT_STYLE_KIND);
-			cli_table_cell_set_color(cell, color);
-		}
-		else {
-			cli_table_cell_set_data(cell, "??");
-
-
-			color = cli_style_get_color(style,
-			                            CLI_ERROR_STYLE_KIND);
-			cli_table_cell_set_color(cell, color);
-		}
-
-		cli_lyd_unload(node);
-	}
-
-	return 0;
-
-
-
-
 }
 
 static const struct cli_table_ops cli_lyd_table_list_ops = {
@@ -320,7 +260,6 @@ cli_lyd_table_init_list(struct cli_lyd_table *         table,
 	const struct lysc_node *       child;
 	int                            err;
 	unsigned int                   c;
-	char *                         path;
 
 	fields = cli_malloc(nr * sizeof(fields[0]));
 	cli_assert(fields);
@@ -351,7 +290,7 @@ cli_lyd_table_init_list(struct cli_lyd_table *         table,
 		goto free;
 	}
 
-	cli_table_init(&table->super, context, false, cli_lyd_table_list_ops);
+	cli_table_init(&table->super, context, false, &cli_lyd_table_list_ops);
 
 	for (c = 0; c < cnt; c++) {
 		struct libscols_column * col;
@@ -367,11 +306,16 @@ cli_lyd_table_init_list(struct cli_lyd_table *         table,
 		}
 
 		cli_table_col_set_userdata(col, (void *)fields[c]->name);
+
+		cli_table_cell_set_color(
+			cli_table_col_get_head(col),
+			cli_style_get_color(cli_get_style(context),
+			                    CLI_LABEL_STYLE_KIND));
 	}
 
-	path = cli_lysc_node_xpath((const struct lysc_node *)list);
-	cli_assert(path);
-	cli_table_set_userdata(&table->super, path);
+	cli_table_set_userdata(&table->super,
+	                       cli_lysc_node_xpath((const struct lysc_node *)
+	                                           list));
 
 	cli_free(fields);
 
@@ -384,4 +328,3 @@ free:
 
 	return err;
 }
-#endif

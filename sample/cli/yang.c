@@ -281,6 +281,7 @@ cli_lyd_load_data(const struct cli_context * context,
 	cli_assert(xpath);
 	cli_assert(xpath[0]);
 	cli_assert(strnlen(xpath, CLI_XPATH_MAX) < CLI_XPATH_MAX);
+	cli_lyd_assert_flags(flags);
 	cli_assert(data);
 
 	int err;
@@ -299,7 +300,7 @@ cli_lyd_load_data(const struct cli_context * context,
 	}
 
 	if (!*data)
-		/* Valid path but no corresponding data subtree found. */
+		/* Valid path but no corresponding data subtree(s) found. */
 		return SR_ERR_NOT_FOUND;
 
 	cli_assert((*data)->tree);
@@ -316,6 +317,7 @@ cli_lyd_load_data_from_schema(const struct cli_context * context,
 {
 	cli_assert_context(context);
 	cli_assert(node);
+	cli_lyd_assert_flags(flags);
 	cli_assert(data);
 
 	char * xpath;
@@ -405,6 +407,7 @@ cli_lyd_load_data_node(const struct cli_context * context,
 
 	cli_assert(*data);
 	cli_assert((*data)->tree);
+	cli_assert(LYD_NODE_IS_ALONE((*data)->tree));
 
 	return SR_ERR_OK;
 }

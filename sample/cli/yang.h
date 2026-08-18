@@ -101,7 +101,7 @@ cli_lysc_find_node(const struct cli_context * context,
 	cli_assert_context(context);
 	cli_assert(xpath);
 
-	return lys_find_path(context->lyctx, subtree, xpath, false);
+	return lys_find_path(context->lyctx, subtree, xpath, 0);
 }
 
 static inline struct ly_set *
@@ -281,6 +281,23 @@ cli_lys_print_module_diag(const struct cli_context * context,
  * Libyang data handling
  ******************************************************************************/
 
+#define cli_lyd_assert_flags(_flags) \
+	cli_assert(!((_flags) & ~(SR_OPER_NO_STATE | \
+	                          SR_OPER_NO_CONFIG | \
+	                          SR_OPER_NO_SUBS | \
+	                          SR_OPER_NO_STORED | \
+	                          SR_OPER_WITH_ORIGIN | \
+	                          SR_OPER_NO_POLL_CACHED | \
+	                          SR_OPER_NO_RUN_CACHED | \
+	                          SR_OPER_NO_PUSH_NP_CONT | \
+	                          SR_OPER_NO_NEW_CHANGES))); \
+	cli_assert(((_flags) & (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG)) != \
+	           (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG))
+
+/* Iterate over children of a YANG data node. */
+#define cli_lyd_foreach_child(_node, _child) \
+	LY_LIST_FOR(lyd_child(_node), child)
+
 /* Get schema node of a data node. */
 static inline const struct lysc_node *
 cli_lyd_schema(const struct lyd_node * node)
@@ -294,38 +311,34 @@ cli_lyd_schema(const struct lyd_node * node)
 static inline const char *
 cli_lyd_value(const struct lyd_node * node)
 {
+	cli_assert(node);
+
 	return lyd_get_value(node);
 }
 
 /* Get value of a single data node. */
-static inline const char *
-cli_lyd_node_value(const sr_data_t * data)
-{
-	cli_assert(data);
-	cli_assert(data->tree);
-	cli_assert(LYD_NODE_IS_ALONE(data->tree));
-	cli_assert(!lyd_child_any(data->tree));
-
-	return lyd_get_value(data->tree);
-}
-
-/* Indicate if the value of a single data node is the default value. */
 static inline bool
-cli_lyd_node_is_default(const sr_data_t * data)
+cli_lyd_is_default(const struct lyd_node * node)
 {
-	cli_assert(data);
-	cli_assert(data->tree);
-	cli_assert(LYD_NODE_IS_ALONE(data->tree));
-	cli_assert(!lyd_child_any(data->tree));
+	cli_assert(node);
 
-	return !!lyd_is_default(data->tree);
+	return !!lyd_is_default(node);
 }
 
-#define cli_lyd_foreach(_data, _node) \
+/* Iterate over a list of YANG data trees. */
+#define cli_lyd_foreach_data(_data, _node) \
 	LY_LIST_FOR((_data)->tree, _node)
 
-#define cli_lyd_foreach_child(_data, _child) \
-	LY_LIST_FOR(lyd_child((_data)->tree), child)
+static inline int
+cli_lyd_find(const struct lyd_node * subtree,
+             const char *            path,
+             struct lyd_node **      node)
+{
+	cli_assert(path);
+	cli_assert(node);
+
+	return lyd_find_path(subtree, path, 0, node);
+}
 
 /* Load multiple (possibly partial) subtrees identified by XPath. */
 extern int

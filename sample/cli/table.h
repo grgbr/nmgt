@@ -149,6 +149,19 @@ cli_table_col_set_userdata(struct libscols_column * column, void * data);
 extern void
 cli_table_col_set_color(struct libscols_column * column, const char * color);
 
+static inline struct libscols_cell *
+cli_table_col_get_head(struct libscols_column * column)
+{
+	cli_assert(column);
+
+	struct libscols_cell * cell;
+
+	cell = scols_column_get_header(column);
+	cli_assert(cell);
+
+	return cell;
+}
+
 static inline unsigned int
 cli_table_get_line_count(const struct cli_table * table)
 {

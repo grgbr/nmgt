@@ -37,22 +37,29 @@ struct cli_show_cmd {
 	cli_assert(_cmd); \
 	cli_cmd_assert(&(_cmd)->super); \
 	cli_lyd_table_assert((_cmd)->table); \
-	cli_assert(((_cmd)->flags == SR_OPER_NO_STATE) || \
-	           ((_cmd)->flags == SR_OPER_NO_CONFIG))
+	cli_lyd_assert_flags((_cmd)->flags); \
+	cli_assert(((_cmd)->flags & (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG)) != \
+	           (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG))
 
 #warning TODO: implement arbitrary output stream for pager support.
 static int
 cli_show_table(const struct cli_cmd *     command,
                struct cli_lyd_table *     table,
+               sr_get_oper_flag_t         flags,
                const struct cli_context * context)
 {
 	cli_show_assert_cmd((const struct cli_show_cmd *)command);
 	cli_lyd_table_assert(table);
+	cli_lyd_assert_flags(flags);
+	cli_assert((flags & (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG)) !=
+	           (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG));
 	cli_assert_context(context);
 
 	int ret;
 
-	ret = cli_table_load((struct cli_table *)table, context, NULL);
+	ret = cli_table_load((struct cli_table *)table,
+	                     context,
+	                     (void *)flags);
 	if (ret) {
 		cli_cmd_log(command,
 		            "cannot load table data: %s.",
@@ -81,7 +88,9 @@ cli_show_format(const struct cli_cmd *     command,
 {
 	cli_show_assert_cmd((const struct cli_show_cmd *)command);
 	cli_assert(schema);
-	cli_assert((flags == SR_OPER_NO_STATE) || (flags == SR_OPER_NO_CONFIG));
+	cli_lyd_assert_flags(flags);
+	cli_assert((flags & (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG)) !=
+	           (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG));
 	cli_assert((format == LYD_JSON) || (format == LYD_XML));
 	cli_assert_context(context);
 
@@ -136,7 +145,10 @@ cli_show_exec_work(struct cli_work * work, struct cli_context * context)
 	 */
 	switch (wk->format) {
 	case CLI_TABLE_DATA_FMT:
-		ret = cli_show_table(&cmd->super, cmd->table, context);
+		ret = cli_show_table(&cmd->super,
+		                     cmd->table,
+		                     cmd->flags,
+		                     context);
 		break;
 
 	case CLI_JSON_DATA_FMT:
@@ -303,7 +315,9 @@ cli_show_create_cmd(struct cli_show_cmd **             command,
 	cli_assert(container);
 	cli_assert(cli_cmd_name_isok(name));
 	cli_assert(filter);
-	cli_assert((flags == SR_OPER_NO_STATE) || (flags == SR_OPER_NO_CONFIG));
+	cli_lyd_assert_flags(flags);
+	cli_assert((flags & (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG)) !=
+	           (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG));
 	cli_assert_context(context);
 
 	struct cli_show_cmd *       cmd;
@@ -376,7 +390,9 @@ cli_show_make_cmd(struct cli_dir *                   directory,
 	cli_assert(container);
 	cli_assert(name);
 	cli_assert(filter);
-	cli_assert((flags == SR_OPER_NO_STATE) || (flags == SR_OPER_NO_CONFIG));
+	cli_lyd_assert_flags(flags);
+	cli_assert((flags & (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG)) !=
+	           (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG));
 	cli_assert_context(context);
 
 	struct cli_cmd * cmd;

@@ -2,6 +2,7 @@
 #define _CLI_LYD_TABLE_H
 
 #include "table.h"
+#include <sysrepo_types.h>
 
 struct lysc_node;
 struct lysc_node_container;
