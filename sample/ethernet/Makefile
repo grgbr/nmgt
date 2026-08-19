@@ -15,6 +15,9 @@ install:
 .PHONY: build
 build:
 
+.PHONY: clean
+clean:
+
 .PHONY: dist
 dist: $(models)
 $(models):

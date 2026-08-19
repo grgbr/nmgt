@@ -16,6 +16,20 @@
 		cli_free(__xpath); \
 	 })
 
+#if defined(CONFIG_CLI_DEBUG)
+
+#define cli_lysc_dbg(_node, _format, ...) \
+	((cli_log_lvl >= SR_LL_DBG) ? cli_lysc_log(_node, \
+	                                           _format, \
+	                                           ## __VA_ARGS__) \
+	                            : (void)0)
+
+#else  /* !defined(CONFIG_CLI_DEBUG) */
+
+#define cli_lysc_dbg(_node, _format, ...)
+
+#endif /* defined(CONFIG_CLI_DEBUG) */
+
 extern const char *
 cli_ly_basetype_str(LY_DATA_TYPE basetype);
 

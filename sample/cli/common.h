@@ -73,6 +73,30 @@
 	        program_invocation_short_name, \
 	        ## __VA_ARGS__)
 
+#if defined(CONFIG_CLI_LOG)
+
+#include <sysrepo_types.h>
+
+extern sr_log_level_t cli_log_lvl;
+
+#endif /* defined(CONFIG_CLI_LOG) */
+
+#if defined(CONFIG_CLI_DEBUG)
+
+#if !defined(CONFIG_CLI_LOG)
+#error Inconsistent debug / logging build configuration !
+#endif /* !defined(CONFIG_CLI_LOG) */
+
+#define cli_dbg(_format, ...) \
+	((cli_log_lvl >= SR_LL_DBG) ? (void)cli_log(_format, ## __VA_ARGS__) \
+	                            : (void)0)
+
+#else  /* defined(CONFIG_CLI_DEBUG) */
+
+#define cli_dbg(_format, ...)
+
+#endif /* defined(CONFIG_CLI_DEBUG) */
+
 #if defined(CONFIG_CLI_ASSERT)
 
 extern void

@@ -56,7 +56,11 @@ clean-libyang:
 
 .PHONY: sample
 sample: $(STAMPDIR)/libsmartcols $(STAMPDIR)/readline $(STAMPDIR)/sysrepo #$(STAMPDIR)/nghttp2 $(STAMPDIR)/netopeer2
-	$(call make_cmd,$(@),PREFIX='$(STAGEDIR)' install)
+	$(call make_cmd,$(@),install PREFIX='$(STAGEDIR)')
+	
+.PHONY: clean-sample
+clean-sample:
+	$(call make_cmd,sample,clean PREFIX='$(STAGEDIR)')
 
 #
 # Python Yang (requires a Python venv)
@@ -165,7 +169,7 @@ $(DOWNDIR)/$(SCOLS_TARBALL_BASE): | $(DOWNDIR)/
 #
 # readline
 #
-READLINE_URI          := ftp://ftp.cwru.edu/pub/bash/readline-8.3.tar.gz
+READLINE_URI          := http://ftp.gnu.org/gnu/readline/readline-8.3.tar.gz
 READLINE_TARBALL_EXT  := $(shell echo '$(notdir $(READLINE_URI))' | sed 's/readline-[0-9.]\+//')
 READLINE_VERS         := $(patsubst readline-%.$(READLINE_TARBALL_EXT),%,$(notdir $(READLINE_URI)))
 READLINE_TARBALL_BASE := readline-$(READLINE_VERS).$(READLINE_TARBALL_EXT)
@@ -275,7 +279,7 @@ dev:
 	$(CSCOPE) -f$(OUTBASE)/cscope.out -bq $$(find $(SRCDIR) $(CURDIR)/src -type f -name "*.[ch]")
 
 .PHONY: clean
-clean:
+clean: clean-sysrepo clean-libyang clean-sample
 	$(RM) -r $(filter-out $(realpath $(DOWNDIR)), \
 	                      $(realpath $(wildcard $(OUTBASE)/*)))
 	$(RM) tags cscope.*

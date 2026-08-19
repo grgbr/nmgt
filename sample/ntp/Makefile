@@ -11,6 +11,9 @@ install:
 .PHONY: build
 build:
 
+.PHONY: clean
+clean:
+
 .PHONY: dist
 dist: ietf-ntp@2022-07-05.yang
 ietf-ntp@2022-07-05.yang:

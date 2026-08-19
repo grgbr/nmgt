@@ -24,10 +24,6 @@ $(DESTDIR)$(PREFIX)/bin/nmgmt-data: $(BUILDDIR)/nmgmt-data
 	$(INSTALL) --mode=755 -D $(<) $(@)
 $(DESTDIR)$(PREFIX)/bin/nmgmt-cli: $(BUILDDIR)/nmgmt-cli
 	$(INSTALL) --mode=755 -D $(<) $(@)
-#$(DESTDIR)$(PREFIX)/lib/libyang/extensions/cli_lyplg.so: \
-#	$(BUILDDIR)/cli_lyplg.so cli-extensions.yang
-#	$(INSTALL) --mode=755 -D $(<) $(@)
-#	$(PREFIX)/sbin/sysrepoctl -i cli-extensions.yang
 
 .PHONY: build
 build: $(BUILDDIR)/nmgmt-schema \
@@ -39,6 +35,13 @@ $(BUILDDIR)/nmgmt-data: old/data.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
 $(BUILDDIR)/nmgmt-cli: cli.c build.c show.c lyd_table.c list.c cd.c pwd.c find.c xpath.c schema.c quit.c table.c shell.c match.c expr.c yang.c dir.c cmd.c path.c arg.c node.c common.c | $(BUILDDIR)/
 	$(CC) -dM -o $(@) $(CFLAGS) $(^) $(LDFLAGS)
+	
+.PHONY: clean
+clean:
+	$(RM) $(DESTDIR)$(PREFIX)/bin/nmgmt-schema
+	$(RM) $(DESTDIR)$(PREFIX)/bin/nmgmt-data
+	$(RM) $(DESTDIR)$(PREFIX)/bin/nmgmt-clin
+	$(RM) -r $(BUILDDIR)
 
 $(BUILDDIR)/:
 	$(MKDIR) -p $(@)

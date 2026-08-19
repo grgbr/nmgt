@@ -95,12 +95,12 @@ static const struct cli_table_ops cli_lyd_table_ops = {
 
 int
 cli_lyd_table_init(struct cli_lyd_table *             table,
-                   const struct lysc_node_container * node,
+                   const struct lysc_node_container * container,
                    cli_lyd_table_filter_node_fn *     filter,
                    const struct cli_context *         context)
 {
 	cli_assert(table);
-	cli_assert(node);
+	cli_assert(container);
 	cli_assert(filter);
 	cli_assert_context(context);
 
@@ -116,7 +116,7 @@ cli_lyd_table_init(struct cli_lyd_table *             table,
 	cli_assert(sizeof("Value") <= CLI_TABLE_LABEL_MAX);
 	cli_table_new_col(&table->super, "Value", 0.7, SCOLS_FL_WRAP);
 
-	cli_lysc_foreach_child((const struct lysc_node *)node, child) {
+	cli_lysc_foreach_child((const struct lysc_node *)container, child) {
 		if ((child->nodetype == LYS_LEAF) && filter(child)) {
 			struct libscols_line *        ln;
 			struct libscols_cell *        cell;
@@ -138,7 +138,7 @@ cli_lyd_table_init(struct cli_lyd_table *             table,
 
 	cli_table_set_userdata(&table->super,
 	                       cli_lysc_node_xpath((const struct lysc_node *)
-	                                           node));
+	                                           container));
 	cli_table_col_set_color(col,
 	                        cli_style_get_color(cli_get_style(context),
 	                                            CLI_LABEL_STYLE_KIND));
@@ -245,7 +245,7 @@ static const struct cli_table_ops cli_lyd_table_list_ops = {
 
 int
 cli_lyd_table_init_list(struct cli_lyd_table *         table,
-                        struct lysc_node_list *        list,
+                        const struct lysc_node_list *  list,
                         cli_lyd_table_filter_node_fn * filter,
                         const struct cli_context *     context)
 {

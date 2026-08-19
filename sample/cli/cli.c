@@ -186,7 +186,7 @@ cli_complete(struct cli_match * matches,
 
 #if defined(CONFIG_CLI_LOG)
 
-static sr_log_level_t cli_log_lvl;
+sr_log_level_t cli_log_lvl;
 
 static void
 cli_sr_log_cb(sr_log_level_t level, const char * message)

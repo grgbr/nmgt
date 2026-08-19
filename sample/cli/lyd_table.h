@@ -20,13 +20,13 @@ typedef bool cli_lyd_table_filter_node_fn(const struct lysc_node * node);
 
 extern int
 cli_lyd_table_init(struct cli_lyd_table *             table,
-                   const struct lysc_node_container * node,
+                   const struct lysc_node_container * container,
                    cli_lyd_table_filter_node_fn *     filter,
                    const struct cli_context *         context);
 
 extern int
 cli_lyd_table_init_list(struct cli_lyd_table *         table,
-                        struct lysc_node_list *        node,
+                        const struct lysc_node_list *  list,
                         cli_lyd_table_filter_node_fn * filter,
                         const struct cli_context *     context);
 

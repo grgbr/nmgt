@@ -19,10 +19,10 @@ install: $(DESTDIR)$(PREFIX)/sbin/ovend \
 $(DESTDIR)$(PREFIX)/sbin/ovend: $(BUILDDIR)/ovend oven.yang oven-cly.yang
 	# Watch out ! Sysrepo /dev/shm entries must be cleaned up before
 	# oven.yang install (see <topdir>/notes.txt)
-	$(PREFIX)/sbin/sysrepoctl -u oven-cly.yang 2>/dev/null || true
-	$(PREFIX)/sbin/sysrepoctl -u oven.yang 2>/dev/null || true
-	$(PREFIX)/sbin/sysrepoctl -i oven.yang
-	$(PREFIX)/sbin/sysrepoctl -i oven-cly.yang
+	$(DESTDIR)$(PREFIX)/sbin/sysrepoctl -u oven-cly 2>/dev/null || true
+	$(DESTDIR)$(PREFIX)/sbin/sysrepoctl -u oven 2>/dev/null || true
+	$(DESTDIR)$(PREFIX)/sbin/sysrepoctl -i oven.yang
+	$(DESTDIR)$(PREFIX)/sbin/sysrepoctl -i oven-cly.yang
 	$(INSTALL) --mode=755 -D $(<) $(@)
 $(DESTDIR)$(PREFIX)/bin/oven-wait: $(BUILDDIR)/oven-wait oven.yang
 	$(INSTALL) --mode=755 -D $(<) $(@)
@@ -36,6 +36,15 @@ $(BUILDDIR)/ovend: ovend.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
 $(BUILDDIR)/oven-wait: wait.c | $(BUILDDIR)/
 	$(CC) -o $(@) $(CFLAGS) $(<) $(LDFLAGS)
+
+.PHONY: clean
+clean:
+	$(DESTDIR)$(PREFIX)/sbin/sysrepoctl -u oven-cly.yang 2>/dev/null || true
+	$(DESTDIR)$(PREFIX)/sbin/sysrepoctl -u oven.yang 2>/dev/null || true
+	$(RM) $(DESTDIR)$(PREFIX)/sbin/ovend
+	$(RM) $(DESTDIR)$(PREFIX)/bin/oven-ctl
+	$(RM) $(DESTDIR)$(PREFIX)/bin/oven-wait
+	$(RM) -r $(BUILDDIR)
 
 $(BUILDDIR)/:
 	$(MKDIR) -p $(@)

@@ -281,40 +281,24 @@ static const struct cli_arg_kword_term cli_show_format_terms[] = {
 	CLI_ARG_KWORD_TERM("xml",   cli_show_on_xml_match),
 };
 
-static bool
-cli_show_filter_config_node(const struct lysc_node * node)
-{
-	cli_assert(node);
-	cli_assert(node->nodetype == LYS_LEAF);
-
-	return (cli_lysc_conf_flags(node) == LYS_CONFIG_W) &&
-	       !(cli_lysc_status_flags(node) & LYS_STATUS_DEPRC);
-}
-
-static bool
-cli_show_filter_oper_node(const struct lysc_node * node)
-{
-	cli_assert(node);
-	cli_assert(node->nodetype == LYS_LEAF);
-
-	return (cli_lysc_conf_flags(node) == LYS_CONFIG_R) &&
-	       !(cli_lysc_status_flags(node) & LYS_STATUS_DEPRC);
-}
+typedef int cli_show_init_cmd_fn(struct cli_lyd_table *,
+                                 const struct lysc_node *,
+                                 const struct cli_context *);
 
 static int
-cli_show_create_cmd(struct cli_show_cmd **             command,
-                    struct cli_dir *                   directory,
-                    const struct lysc_node_container * container,
-                    const char *                       name,
-                    cli_lyd_table_filter_node_fn *     filter,
-                    sr_get_oper_flag_t                 flags,
-                    const struct cli_context *         context)
+cli_show_create_cmd(struct cli_show_cmd **     command,
+                    struct cli_dir *           directory,
+                    const struct lysc_node *   node,
+                    const char *               name,
+                    cli_show_init_cmd_fn *     init,
+                    sr_get_oper_flag_t         flags,
+                    const struct cli_context * context)
 {
 	cli_assert(command);
 	cli_dir_assert(directory);
-	cli_assert(container);
+	cli_assert(node);
 	cli_assert(cli_cmd_name_isok(name));
-	cli_assert(filter);
+	cli_assert(init);
 	cli_lyd_assert_flags(flags);
 	cli_assert((flags & (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG)) !=
 	           (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG));
@@ -341,7 +325,7 @@ cli_show_create_cmd(struct cli_show_cmd **             command,
 	 * argument.
 	 */
 	tbl = cli_malloc(sizeof(*tbl));
-	err = cli_lyd_table_init(tbl, container, filter, context);
+	err = init(tbl, node, context);
 	if (err) {
 		cli_assert(err == -ENOENT);
 		goto free;
@@ -379,17 +363,17 @@ free:
 }
 
 static int
-cli_show_make_cmd(struct cli_dir *                   directory,
-                  const struct lysc_node_container * container,
-                  const char *                       name,
-                  cli_lyd_table_filter_node_fn *     filter,
-                  sr_get_oper_flag_t                 flags,
-                  const struct cli_context *         context)
+cli_show_make_cmd(struct cli_dir *           directory,
+                  const struct lysc_node *   node,
+                  const char *               name,
+                  cli_show_init_cmd_fn *     init,
+                  sr_get_oper_flag_t         flags,
+                  const struct cli_context * context)
 {
 	cli_dir_assert(directory);
-	cli_assert(container);
+	cli_assert(node);
 	cli_assert(name);
-	cli_assert(filter);
+	cli_assert(init);
 	cli_lyd_assert_flags(flags);
 	cli_assert((flags & (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG)) !=
 	           (SR_OPER_NO_STATE | SR_OPER_NO_CONFIG));
@@ -413,31 +397,64 @@ cli_show_make_cmd(struct cli_dir *                   directory,
 
 	ret = cli_show_create_cmd((struct cli_show_cmd **)&cmd,
 	                          directory,
-	                          container,
+	                          node,
 	                          name,
-	                          filter,
+	                          init,
 	                          flags,
 	                          context);
 	if (ret) {
 		cli_assert(ret == -ENOENT);
 
-#if defined(CONFIG_CLI_DEBUG)
-		cli_lysc_log((const struct lysc_node *)container,
-		             "ignoring '%s' show command creation: "
+		cli_lysc_dbg(node,
+		             "'%s' show command creation ignored: "
 		             "no child schema data node found.",
 		             name);
-#endif /* defined(CONFIG_CLI_DEBUG) */
 	}
 
 	return 0;
 
 err:
-	cli_lysc_log((const struct lysc_node *)container,
-	             "cannot create show command '%s': %s.",
-	             name,
-	             msg);
+	cli_lysc_log(node, "cannot create show command '%s': %s.", name, msg);
 
 	return ret;
+}
+
+static bool
+cli_show_filter_config_node(const struct lysc_node * node)
+{
+	cli_assert(node);
+	cli_assert(node->nodetype == LYS_LEAF);
+
+	return (cli_lysc_conf_flags(node) == LYS_CONFIG_W) &&
+	       !(cli_lysc_status_flags(node) &
+	         (LYS_STATUS_OBSLT | LYS_STATUS_DEPRC));
+}
+
+static bool
+cli_show_filter_oper_node(const struct lysc_node * node)
+{
+	cli_assert(node);
+	cli_assert(node->nodetype == LYS_LEAF);
+
+	return (cli_lysc_conf_flags(node) == LYS_CONFIG_R) &&
+	       !(cli_lysc_status_flags(node) &
+	         (LYS_STATUS_OBSLT | LYS_STATUS_DEPRC));
+}
+
+static int
+cli_show_init_config_cmd(struct cli_lyd_table *     table,
+                         const struct lysc_node *   node,
+                         const struct cli_context * context)
+{
+	cli_assert(table);
+	cli_assert(node);
+	cli_assert(node->nodetype == LYS_CONTAINER);
+	cli_assert_context(context);
+
+	return cli_lyd_table_init(table,
+	                          (const struct lysc_node_container *)node,
+	                          cli_show_filter_config_node,
+	                          context);
 }
 
 int
@@ -452,11 +469,27 @@ cli_show_make_config_cmd(struct cli_dir *                   directory,
 	cli_assert_context(context);
 
 	return cli_show_make_cmd(directory,
-	                         container,
+	                         (const struct lysc_node *)container,
 	                         name,
-	                         cli_show_filter_config_node,
+	                         cli_show_init_config_cmd,
 	                         SR_OPER_NO_STATE,
 	                         context);
+}
+
+static int
+cli_show_init_oper_cmd(struct cli_lyd_table *     table,
+                       const struct lysc_node *   node,
+                       const struct cli_context * context)
+{
+	cli_assert(table);
+	cli_assert(node);
+	cli_assert(node->nodetype == LYS_CONTAINER);
+	cli_assert_context(context);
+
+	return cli_lyd_table_init(table,
+	                          (const struct lysc_node_container *)node,
+	                          cli_show_filter_oper_node,
+	                          context);
 }
 
 int
@@ -471,9 +504,79 @@ cli_show_make_oper_cmd(struct cli_dir *                   directory,
 	cli_assert_context(context);
 
 	return cli_show_make_cmd(directory,
-	                         container,
+	                         (const struct lysc_node *)container,
 	                         name,
-	                         cli_show_filter_oper_node,
+	                         cli_show_init_oper_cmd,
+	                         SR_OPER_NO_CONFIG,
+	                         context);
+}
+
+static int
+cli_show_init_config_list_cmd(struct cli_lyd_table *     table,
+                              const struct lysc_node *   node,
+                              const struct cli_context * context)
+{
+	cli_assert(table);
+	cli_assert(node);
+	cli_assert(node->nodetype == LYS_LIST);
+	cli_assert_context(context);
+
+	return cli_lyd_table_init_list(table,
+	                               (const struct lysc_node_list *)node,
+	                               cli_show_filter_config_node,
+	                               context);
+}
+
+int
+cli_show_make_config_list_cmd(struct cli_dir *         directory,
+                              const struct lysc_node_list * list,
+                              const char *                  name,
+                              const struct cli_context *    context)
+{
+	cli_dir_assert(directory);
+	cli_assert(list);
+	cli_assert(name);
+	cli_assert_context(context);
+
+	return cli_show_make_cmd(directory,
+	                         (const struct lysc_node *)list,
+	                         name,
+	                         cli_show_init_config_list_cmd,
+	                         SR_OPER_NO_STATE,
+	                         context);
+}
+
+static int
+cli_show_init_oper_list_cmd(struct cli_lyd_table *     table,
+                            const struct lysc_node *   node,
+                            const struct cli_context * context)
+{
+	cli_assert(table);
+	cli_assert(node);
+	cli_assert(node->nodetype == LYS_LIST);
+	cli_assert_context(context);
+
+	return cli_lyd_table_init_list(table,
+	                               (const struct lysc_node_list *)node,
+	                               cli_show_filter_oper_node,
+	                               context);
+}
+
+int
+cli_show_make_oper_list_cmd(struct cli_dir *              directory,
+                            const struct lysc_node_list * list,
+                            const char *                  name,
+                            const struct cli_context *    context)
+{
+	cli_dir_assert(directory);
+	cli_assert(list);
+	cli_assert(name);
+	cli_assert_context(context);
+
+	return cli_show_make_cmd(directory,
+	                         (const struct lysc_node *)list,
+	                         name,
+	                         cli_show_init_oper_list_cmd,
 	                         SR_OPER_NO_CONFIG,
 	                         context);
 }
