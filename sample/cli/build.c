@@ -8,15 +8,16 @@
  ******************************************************************************/
 
 static bool
-cli_build_node_outdated(const struct lysc_node * node)
+cli_build_node_uptodate(const struct lysc_node * node)
 {
 	if (!(cli_lysc_status_flags(node) &
 	      (LYS_STATUS_OBSLT | LYS_STATUS_DEPRC)))
-		return false;
+		return true;
 
 	/* Ignore obsolete and deprecated nodes. */
 	cli_lysc_dbg(node, "obsolete / deprecated node ignored.");
-	return true;
+
+	return false;
 }
 
 /*
@@ -42,7 +43,6 @@ cli_build_child_dir(struct cli_dir **        directory,
 		return 0;
 	}
 
-nodir:
 	cli_lysc_log(node,
 	             "cannot create menu directory entry: %s.",
 	             cli_dir_strerror(-ret));
@@ -464,6 +464,101 @@ cli_build_handle_subcont(struct cli_build_stat *            state,
                          struct cli_context *               context,
                          const struct lysc_node_container * container,
                          enum cli_walk_event                event,
+                         struct cli_build *                 builder);
+
+static int
+cli_build_handle_contlist(struct cli_build_stat *       state,
+                          struct cli_context *          context,
+                          const struct lysc_node_list * list,
+                          enum cli_walk_event           event,
+                          struct cli_build *            builder);
+
+static int
+cli_build_handle_listcont(struct cli_build_stat *            state,
+                          struct cli_context *               context,
+                          const struct lysc_node_container * container,
+                          enum cli_walk_event                event,
+                          struct cli_build *                 builder);
+
+static int
+cli_build_handle_sublist(struct cli_build_stat *       state,
+                         struct cli_context *          context,
+                         const struct lysc_node_list * list,
+                         enum cli_walk_event           event,
+                         struct cli_build *            builder);
+
+static int
+cli_build_process_cont(struct cli_build_stat *  state,
+                       struct cli_context *     context,
+                       const struct lysc_node * node,
+                       enum cli_walk_event      event,
+                       struct cli_build *       builder);
+
+static int
+cli_build_process_contlist(struct cli_build_stat *  state,
+                           struct cli_context *     context,
+                           const struct lysc_node * node,
+                           enum cli_walk_event      event,
+                           struct cli_build *       builder)
+{
+	cli_assert(state);
+	cli_assert_context(context);
+	cli_assert(node);
+	cli_assert(event == CLI_WALK_PRE_EVT);
+	cli_build_assert(builder);
+
+	switch (node->nodetype) {
+	case LYS_CONTAINER:
+		return cli_build_handle_listcont(
+			state,
+			context,
+			(const struct lysc_node_container *)node,
+			event,
+			builder);
+
+	case LYS_LIST:
+		return cli_build_handle_sublist(
+			state,
+			context,
+			(const struct lysc_node_list *)node,
+			event,
+			builder);
+
+	case LYS_LEAF:
+		break;
+
+	case LYS_LEAFLIST:
+	case LYS_CHOICE:
+	case LYS_ANYXML:
+	case LYS_ANYDATA:
+	case LYS_ACTION:
+	case LYS_NOTIF:
+		cli_lysc_dbg(node,
+		             "'%s' node type not implemented !",
+		             cli_ly_nodetype_str(node->nodetype));
+		break;
+
+	case LYS_RPC:
+	default:
+		/*
+		 * Statement not allowed by RFC7950's "YANG ABNF Grammar"
+		 * section 14.
+		 * Basically, this should never happen since we are traversing
+		 * a YANG compiled schema.
+		 */
+		cli_lysc_dbg(node,
+		             "invalid '%s' node type.",
+		             cli_ly_nodetype_str(node->nodetype));
+	}
+
+	return CLI_WALK_SKIP_RET;
+}
+
+static int
+cli_build_handle_subcont(struct cli_build_stat *            state,
+                         struct cli_context *               context,
+                         const struct lysc_node_container * container,
+                         enum cli_walk_event                event,
                          struct cli_build *                 builder)
 {
 	cli_assert(state);
@@ -475,16 +570,17 @@ cli_build_handle_subcont(struct cli_build_stat *            state,
 	cli_assert(event == CLI_WALK_PRE_EVT);
 	cli_build_assert(builder);
 
-	if (cli_build_node_outdated((const struct lysc_node *)container)) {
+	if (cli_build_node_uptodate((const struct lysc_node *)container)) {
 		struct cli_dir * dir = state->dir;
 		int              ret;
 
 		/*
-		 * Create the directory entry related to the container given in
-		 * argument.
+		 * Create the directory entry related to the container
+		 * given in argument.
 		 */
 		ret = cli_build_child_dir(&dir,
-		                          (const struct lysc_node *)container,
+		                          (const struct lysc_node *)
+		                          container,
 		                          context);
 		if (ret)
 			return ret;
@@ -501,8 +597,8 @@ cli_build_handle_subcont(struct cli_build_stat *            state,
 			return ret;
 
 		/*
-		 * Create and attach a show operational state command to the
-		 * directory just created.
+		 * Create and attach a show operational state command to
+		 * the directory just created.
 		 */
 		ret = cli_show_make_oper_cmd(dir,
 		                             container,
@@ -512,7 +608,7 @@ cli_build_handle_subcont(struct cli_build_stat *            state,
 			return ret;
 
 		cli_build_push(builder,
-		               cli_build_process_subcont,
+		               cli_build_process_cont,
 		               dir);
 
 		return CLI_WALK_CONT_RET;
@@ -536,12 +632,12 @@ cli_build_handle_contlist(struct cli_build_stat *       state,
 	cli_assert(event == CLI_WALK_PRE_EVT);
 	cli_build_assert(builder);
 
-	if (cli_build_node_outdated((const struct lysc_node *)list)) {
+	if (cli_build_node_uptodate((const struct lysc_node *)list)) {
 		int ret;
 
 		/*
-		 * Create and attach a show configuration command to its parent
-		 * directory.
+		 * Create and attach a show configuration command to its
+		 * parent directory.
 		 */
 		ret = cli_show_make_config_list_cmd(state->dir,
 		                                    list,
@@ -551,8 +647,8 @@ cli_build_handle_contlist(struct cli_build_stat *       state,
 			return ret;
 
 		/*
-		 * Create and attach a show operational state command to its
-		 * parent directory.
+		 * Create and attach a show operational state command to
+		 * its parent directory.
 		 */
 		ret = cli_show_make_oper_list_cmd(state->dir,
 		                                  list,
@@ -562,7 +658,7 @@ cli_build_handle_contlist(struct cli_build_stat *       state,
 			return ret;
 
 		cli_build_push(builder,
-		               cli_build_process_sublist,
+		               cli_build_process_contlist,
 		               state->dir);
 
 		return CLI_WALK_CONT_RET;
@@ -572,32 +668,26 @@ cli_build_handle_contlist(struct cli_build_stat *       state,
 }
 
 static int
-cli_build_process_topcont(struct cli_build_stat *  state,
-                          struct cli_context *     context,
-                          const struct lysc_node * node,
-                          enum cli_walk_event      event,
-                          struct cli_build *       builder)
+cli_build_process_cont(struct cli_build_stat *  state,
+                       struct cli_context *     context,
+                       const struct lysc_node * node,
+                       enum cli_walk_event      event,
+                       struct cli_build *       builder)
 {
 	cli_assert(state);
 	cli_assert_context(context);
 	cli_assert(node);
-	cli_assert((event == CLI_WALK_PRE_EVT) || (event == CLI_WALK_POST_EVT));
+	cli_assert(event == CLI_WALK_PRE_EVT);
 	cli_build_assert(builder);
 
 	switch (node->nodetype) {
 	case LYS_CONTAINER:
-		if (event == CLI_WALK_PRE_EVT)
-			return cli_build_handle_subcont(
-				state,
-				context,
-				(const struct lysc_node_container *)node,
-				event,
-				builder);
-
-		/* else if (event == CLI_WALK_POST_EVT) */
-		cli_build_pop(builder);
-
-		return CLI_WALK_CONT_RET;
+		return cli_build_handle_subcont(
+			state,
+			context,
+			(const struct lysc_node_container *)node,
+			event,
+			builder);
 
 	case LYS_LIST:
 		return cli_build_handle_contlist(
@@ -608,7 +698,6 @@ cli_build_process_topcont(struct cli_build_stat *  state,
 			builder);
 
 	case LYS_LEAF:
-		cli_assert(event == CLI_WALK_PRE_EVT);
 		break;
 
 	case LYS_LEAFLIST:
@@ -617,7 +706,6 @@ cli_build_process_topcont(struct cli_build_stat *  state,
 	case LYS_ANYDATA:
 	case LYS_ACTION:
 	case LYS_NOTIF:
-		cli_assert(event == CLI_WALK_PRE_EVT);
 		cli_lysc_dbg(node,
 		             "'%s' node type not implemented !",
 		             cli_ly_nodetype_str(node->nodetype));
@@ -631,7 +719,6 @@ cli_build_process_topcont(struct cli_build_stat *  state,
 		 * Basically, this should never happen since we are traversing
 		 * a YANG compiled schema.
 		 */
-		cli_assert(event == CLI_WALK_PRE_EVT);
 		cli_lysc_dbg(node,
 		             "invalid '%s' node type.",
 		             cli_ly_nodetype_str(node->nodetype));
@@ -645,6 +732,45 @@ cli_build_process_topcont(struct cli_build_stat *  state,
  ******************************************************************************/
 
 static int
+cli_build_handle_listcont(struct cli_build_stat *            state,
+                          struct cli_context *               context,
+                          const struct lysc_node_container * container,
+                          enum cli_walk_event                event,
+                          struct cli_build *                 builder)
+{
+	cli_assert(state);
+	cli_assert(state->dir);
+	cli_assert_context(context);
+	cli_assert(container);
+	cli_assert(((const struct lysc_node *)container)->nodetype ==
+	           LYS_CONTAINER);
+	cli_assert(event == CLI_WALK_PRE_EVT);
+	cli_build_assert(builder);
+
+#warning Implement me!!
+	return CLI_WALK_SKIP_RET;
+}
+
+static int
+cli_build_handle_sublist(struct cli_build_stat *       state,
+                         struct cli_context *          context,
+                         const struct lysc_node_list * list,
+                         enum cli_walk_event           event,
+                         struct cli_build *            builder)
+{
+	cli_assert(state);
+	cli_assert(state->dir);
+	cli_assert_context(context);
+	cli_assert(list);
+	cli_assert(((const struct lysc_node *)list)->nodetype == LYS_LIST);
+	cli_assert(event == CLI_WALK_PRE_EVT);
+	cli_build_assert(builder);
+
+#warning Implement me!!
+	return CLI_WALK_SKIP_RET;
+}
+
+static int
 cli_build_process_toplist(struct cli_build_stat *  state,
                           struct cli_context *     context,
                           const struct lysc_node * node,
@@ -654,7 +780,7 @@ cli_build_process_toplist(struct cli_build_stat *  state,
 	cli_assert(state);
 	cli_assert_context(context);
 	cli_assert(node);
-	cli_assert((event == CLI_WALK_PRE_EVT) || (event == CLI_WALK_POST_EVT));
+	cli_assert(event == CLI_WALK_PRE_EVT);
 	cli_build_assert(builder);
 
 	switch (node->nodetype) {
@@ -667,21 +793,14 @@ cli_build_process_toplist(struct cli_build_stat *  state,
 			builder);
 
 	case LYS_LIST:
-		if (event == CLI_WALK_PRE_EVT)
-			return cli_build_handle_sublist(
-				state,
-				context,
-				(const struct lysc_node_list *)node,
-				event,
-				builder);
-
-		/* else if (event == CLI_WALK_POST_EVT) */
-		cli_build_pop(builder);
-
-		return CLI_WALK_CONT_RET;
+		return cli_build_handle_sublist(
+			state,
+			context,
+			(const struct lysc_node_list *)node,
+			event,
+			builder);
 
 	case LYS_LEAF:
-		cli_assert(event == CLI_WALK_PRE_EVT);
 		break;
 
 	case LYS_LEAFLIST:
@@ -690,7 +809,6 @@ cli_build_process_toplist(struct cli_build_stat *  state,
 	case LYS_ANYDATA:
 	case LYS_ACTION:
 	case LYS_NOTIF:
-		cli_assert(event == CLI_WALK_PRE_EVT);
 		cli_lysc_dbg(node,
 		             "'%s' node type not implemented !",
 		             cli_ly_nodetype_str(node->nodetype));
@@ -704,7 +822,6 @@ cli_build_process_toplist(struct cli_build_stat *  state,
 		 * Basically, this should never happen since we are traversing
 		 * a YANG compiled schema.
 		 */
-		cli_assert(event == CLI_WALK_PRE_EVT);
 		cli_lysc_dbg(node,
 		             "invalid '%s' node type.",
 		             cli_ly_nodetype_str(node->nodetype));
@@ -759,49 +876,6 @@ cli_build_top_dir(struct cli_dir **        directory,
 }
 
 static int
-cli_build_topcont_dir(struct cli_dir **                  directory,
-                      const struct lysc_node_container * container,
-                      struct cli_context *               context)
-{
-	cli_assert(directory);
-	cli_assert(container);
-	cli_assert_context(context);
-
-	struct cli_dir * dir;
-	int              ret;
-
-	/*
-	 * Create the directory entry related to the container given in
-	 * argument.
-	 */
-	ret = cli_build_top_dir(&dir,
-	                        (const struct lysc_node *)container,
-	                        context);
-	if (ret)
-		return ret;
-
-	/*
-	 * Create and attach a show configuration command to the directory just
-	 * created.
-	 */
-	ret = cli_show_make_config_cmd(dir, container, "config", context);
-	if (ret)
-		return ret;
-
-	/*
-	 * Create and attach a show operational state command to the directory
-	 * just created.
-	 */
-	ret = cli_show_make_oper_cmd(dir, container, "status", context);
-	if (ret)
-		return ret;
-
-	*directory = dir;
-
-	return 0;
-}
-
-static int
 cli_build_handle_topcont(struct cli_build_stat *            state __cli_unused,
                          struct cli_context *               context,
                          const struct lysc_node_container * container,
@@ -814,69 +888,54 @@ cli_build_handle_topcont(struct cli_build_stat *            state __cli_unused,
 	cli_assert(container);
 	cli_assert(((const struct lysc_node *)container)->nodetype ==
 	           LYS_CONTAINER);
-	cli_assert((event == CLI_WALK_PRE_EVT) || (event == CLI_WALK_POST_EVT));
+	cli_assert(event == CLI_WALK_PRE_EVT);
 	cli_build_assert(builder);
 
-	if (event == CLI_WALK_PRE_EVT) {
-		if (cli_build_node_outdated((const struct lysc_node *)
-		                            container)) {
-			struct cli_dir * dir;
-			int              ret;
+	if (cli_build_node_uptodate((const struct lysc_node *) container)) {
+		struct cli_dir * dir;
+		int              ret;
 
-			ret = cli_build_topcont_dir(&dir, container, context);
-			cli_assert(ret <= 0);
-			if (ret)
-				return ret;
+		/*
+		 * Create the directory entry related to the container
+		 * given in argument.
+		 */
+		ret = cli_build_top_dir(&dir,
+		                        (const struct lysc_node *)
+		                        container,
+		                        context);
+		if (ret)
+			return ret;
 
-			cli_build_push(builder,
-			               cli_build_process_topcont,
-			               dir);
-		}
-		else
-			return CLI_WALK_SKIP_RET;
+		/*
+		 * Create and attach a show configuration command to the
+		 * directory just created.
+		 */
+		ret = cli_show_make_config_cmd(dir,
+		                               container,
+		                               "config",
+		                               context);
+		if (ret)
+			return ret;
+
+		/*
+		 * Create and attach a show operational state command to
+		 * the directory just created.
+		 */
+		ret = cli_show_make_oper_cmd(dir,
+		                             container,
+		                             "status",
+		                             context);
+		if (ret)
+			return ret;
+
+		cli_build_push(builder,
+		               cli_build_process_cont,
+		               dir);
+
+		return CLI_WALK_CONT_RET;
 	}
-	else /* if (event == CLI_WALK_POST_EVT) */
-		cli_build_pop(builder);
-
-	return CLI_WALK_CONT_RET;
-}
-
-static int
-cli_build_toplist_dir(struct cli_dir **             directory,
-                      const struct lysc_node_list * list,
-                      struct cli_context *          context)
-{
-	cli_assert(directory);
-	cli_assert(list);
-	cli_assert_context(context);
-
-	struct cli_dir * dir;
-	int              ret;
-
-	/* Create the directory entry related to the list given in argument. */
-	ret = cli_build_top_dir(&dir, (const struct lysc_node *)list, context);
-	if (ret)
-		return ret;
-
-	/*
-	 * Create and attach a show configuration command to the directory just
-	 * created.
-	 */
-	ret = cli_show_make_config_list_cmd(dir, list, "config", context);
-	if (ret)
-		return ret;
-
-	/*
-	 * Create and attach a show operational state command to the directory
-	 * just created.
-	 */
-	ret = cli_show_make_oper_list_cmd(dir, list, "status", context);
-	if (ret)
-		return ret;
-
-	*directory = dir;
-
-	return 0;
+	else
+		return CLI_WALK_SKIP_RET;
 }
 
 static int
@@ -891,28 +950,51 @@ cli_build_handle_toplist(struct cli_build_stat *       state __cli_unused,
 	cli_assert_context(context);
 	cli_assert(list);
 	cli_assert(((const struct lysc_node *)list)->nodetype == LYS_LIST);
-	cli_assert((event == CLI_WALK_PRE_EVT) || (event == CLI_WALK_POST_EVT));
+	cli_assert(event == CLI_WALK_PRE_EVT);
 	cli_build_assert(builder);
 
-	if (event == CLI_WALK_PRE_EVT) {
-		if (cli_build_node_outdated((const struct lysc_node *)list)) {
-			struct cli_dir * dir;
-			int              ret;
+	if (cli_build_node_uptodate((const struct lysc_node *)list)) {
+		struct cli_dir * dir;
+		int              ret;
 
-			ret = cli_build_toplist_dir(&dir, list, context);
-			cli_assert(ret <= 0);
-			if (ret)
-				return ret;
+		/*
+		 * Create the directory entry related to the list given
+		 * in argument.
+		 */
+		ret = cli_build_top_dir(&dir,
+		                        (const struct lysc_node *)list,
+		                        context);
+		if (ret)
+			return ret;
 
-			cli_build_push(builder, cli_build_process_toplist, dir);
-		}
-		else
-			return CLI_WALK_SKIP_RET;
+		/*
+		 * Create and attach a show configuration command to the
+		 * directory just created.
+		 */
+		ret = cli_show_make_config_list_cmd(dir,
+		                                    list,
+		                                    "config",
+		                                    context);
+		if (ret)
+			return ret;
+
+		/*
+		 * Create and attach a show operational state command to
+		 * the directory just created.
+		 */
+		ret = cli_show_make_oper_list_cmd(dir,
+		                                  list,
+		                                  "status",
+		                                  context);
+		if (ret)
+			return ret;
+
+		cli_build_push(builder, cli_build_process_toplist, dir);
+
+		return CLI_WALK_CONT_RET;
 	}
-	else /* if (event == CLI_WALK_POST_EVT) */
-		cli_build_pop(builder);
-
-	return CLI_WALK_CONT_RET;
+	else
+		return CLI_WALK_SKIP_RET;
 }
 
 static int
@@ -925,7 +1007,7 @@ cli_build_process_module(struct cli_build_stat *  state,
 	cli_assert(state);
 	cli_assert_context(context);
 	cli_assert(node);
-	cli_assert((event == CLI_WALK_PRE_EVT) || (event == CLI_WALK_POST_EVT));
+	cli_assert(event == CLI_WALK_PRE_EVT);
 	cli_build_assert(builder);
 
 	switch (node->nodetype) {
@@ -947,7 +1029,6 @@ cli_build_process_module(struct cli_build_stat *  state,
 
 	case LYS_RPC:
 	case LYS_NOTIF:
-		cli_assert(event == CLI_WALK_PRE_EVT);
 		cli_lysc_dbg(node,
 		             "'%s' node type not implemented !",
 		             cli_ly_nodetype_str(node->nodetype));
@@ -966,7 +1047,6 @@ cli_build_process_module(struct cli_build_stat *  state,
 		 * We don't have to support them as long as none of the YANG
 		 * modules we parse use them as top-level statements.
 		 */
-		cli_assert(event == CLI_WALK_PRE_EVT);
 		cli_lysc_dbg(node,
 		             "unexpected '%s' node type.",
 		             cli_ly_nodetype_str(node->nodetype));
@@ -990,10 +1070,16 @@ cli_build_tree(struct cli_context *     context,
 	cli_assert((event == CLI_WALK_PRE_EVT) || (event == CLI_WALK_POST_EVT));
 	cli_assert(builder);
 
-	return cli_build_process((struct cli_build *)builder,
-	                         node,
-	                         event,
-	                         context);
+	if (event == CLI_WALK_PRE_EVT)
+		return cli_build_process((struct cli_build *)builder,
+		                         node,
+		                         event,
+		                         context);
+
+	/* else if (event == CLI_WALK_POST_EVT) */
+	cli_build_pop(builder);
+
+	return CLI_WALK_CONT_RET;
 }
 
 int
