@@ -342,7 +342,7 @@ unload:
 static int
 cli_build_handle_list(struct cli_context *     context,
                       const struct lysc_node * node,
-                      struct cli_build_stat *       builder)
+                      struct cli_build_stat *  builder)
 {
 	struct cli_dir * dir = builder->dir;
 
@@ -455,38 +455,6 @@ cli_build_tree_dir(struct cli_context *     context,
 
 #endif
 
-/******************************************************************************
- * Container command line builder state handling.
- ******************************************************************************/
-
-static int
-cli_build_handle_subcont(struct cli_build_stat *            state,
-                         struct cli_context *               context,
-                         const struct lysc_node_container * container,
-                         enum cli_walk_event                event,
-                         struct cli_build *                 builder);
-
-static int
-cli_build_handle_contlist(struct cli_build_stat *       state,
-                          struct cli_context *          context,
-                          const struct lysc_node_list * list,
-                          enum cli_walk_event           event,
-                          struct cli_build *            builder);
-
-static int
-cli_build_handle_listcont(struct cli_build_stat *            state,
-                          struct cli_context *               context,
-                          const struct lysc_node_container * container,
-                          enum cli_walk_event                event,
-                          struct cli_build *                 builder);
-
-static int
-cli_build_handle_sublist(struct cli_build_stat *       state,
-                         struct cli_context *          context,
-                         const struct lysc_node_list * list,
-                         enum cli_walk_event           event,
-                         struct cli_build *            builder);
-
 static int
 cli_build_process_cont(struct cli_build_stat *  state,
                        struct cli_context *     context,
@@ -495,71 +463,22 @@ cli_build_process_cont(struct cli_build_stat *  state,
                        struct cli_build *       builder);
 
 static int
-cli_build_process_contlist(struct cli_build_stat *  state,
-                           struct cli_context *     context,
-                           const struct lysc_node * node,
-                           enum cli_walk_event      event,
-                           struct cli_build *       builder)
-{
-	cli_assert(state);
-	cli_assert_context(context);
-	cli_assert(node);
-	cli_assert(event == CLI_WALK_PRE_EVT);
-	cli_build_assert(builder);
+cli_build_process_list(struct cli_build_stat *  state,
+                       struct cli_context *     context,
+                       const struct lysc_node * node,
+                       enum cli_walk_event      event,
+                       struct cli_build *       builder);
 
-	switch (node->nodetype) {
-	case LYS_CONTAINER:
-		return cli_build_handle_listcont(
-			state,
-			context,
-			(const struct lysc_node_container *)node,
-			event,
-			builder);
-
-	case LYS_LIST:
-		return cli_build_handle_sublist(
-			state,
-			context,
-			(const struct lysc_node_list *)node,
-			event,
-			builder);
-
-	case LYS_LEAF:
-		break;
-
-	case LYS_LEAFLIST:
-	case LYS_CHOICE:
-	case LYS_ANYXML:
-	case LYS_ANYDATA:
-	case LYS_ACTION:
-	case LYS_NOTIF:
-		cli_lysc_dbg(node,
-		             "'%s' node type not implemented !",
-		             cli_ly_nodetype_str(node->nodetype));
-		break;
-
-	case LYS_RPC:
-	default:
-		/*
-		 * Statement not allowed by RFC7950's "YANG ABNF Grammar"
-		 * section 14.
-		 * Basically, this should never happen since we are traversing
-		 * a YANG compiled schema.
-		 */
-		cli_lysc_dbg(node,
-		             "invalid '%s' node type.",
-		             cli_ly_nodetype_str(node->nodetype));
-	}
-
-	return CLI_WALK_SKIP_RET;
-}
+/******************************************************************************
+ * Container command line builder state handling.
+ ******************************************************************************/
 
 static int
-cli_build_handle_subcont(struct cli_build_stat *            state,
-                         struct cli_context *               context,
-                         const struct lysc_node_container * container,
-                         enum cli_walk_event                event,
-                         struct cli_build *                 builder)
+cli_build_handle_cont(struct cli_build_stat *            state,
+                      struct cli_context *               context,
+                      const struct lysc_node_container * container,
+                      enum cli_walk_event                event,
+                      struct cli_build *                 builder)
 {
 	cli_assert(state);
 	cli_assert(state->dir);
@@ -618,11 +537,11 @@ cli_build_handle_subcont(struct cli_build_stat *            state,
 }
 
 static int
-cli_build_handle_contlist(struct cli_build_stat *       state,
-                          struct cli_context *          context,
-                          const struct lysc_node_list * list,
-                          enum cli_walk_event           event,
-                          struct cli_build *            builder)
+cli_build_handle_list(struct cli_build_stat *       state,
+                      struct cli_context *          context,
+                      const struct lysc_node_list * list,
+                      enum cli_walk_event           event,
+                      struct cli_build *            builder)
 {
 	cli_assert(state);
 	cli_assert(state->dir);
@@ -658,7 +577,7 @@ cli_build_handle_contlist(struct cli_build_stat *       state,
 			return ret;
 
 		cli_build_push(builder,
-		               cli_build_process_contlist,
+		               cli_build_process_list,
 		               state->dir);
 
 		return CLI_WALK_CONT_RET;
@@ -682,7 +601,7 @@ cli_build_process_cont(struct cli_build_stat *  state,
 
 	switch (node->nodetype) {
 	case LYS_CONTAINER:
-		return cli_build_handle_subcont(
+		return cli_build_handle_cont(
 			state,
 			context,
 			(const struct lysc_node_container *)node,
@@ -690,7 +609,7 @@ cli_build_process_cont(struct cli_build_stat *  state,
 			builder);
 
 	case LYS_LIST:
-		return cli_build_handle_contlist(
+		return cli_build_handle_list(
 			state,
 			context,
 			(const struct lysc_node_list *)node,
@@ -732,11 +651,11 @@ cli_build_process_cont(struct cli_build_stat *  state,
  ******************************************************************************/
 
 static int
-cli_build_handle_listcont(struct cli_build_stat *            state,
-                          struct cli_context *               context,
-                          const struct lysc_node_container * container,
-                          enum cli_walk_event                event,
-                          struct cli_build *                 builder)
+cli_build_handle_list_cont(struct cli_build_stat *            state,
+                           struct cli_context *               context,
+                           const struct lysc_node_container * container,
+                           enum cli_walk_event                event,
+                           struct cli_build *                 builder)
 {
 	cli_assert(state);
 	cli_assert(state->dir);
@@ -747,35 +666,56 @@ cli_build_handle_listcont(struct cli_build_stat *            state,
 	cli_assert(event == CLI_WALK_PRE_EVT);
 	cli_build_assert(builder);
 
-#warning Implement me!!
-	return CLI_WALK_SKIP_RET;
+	if (cli_build_node_uptodate((const struct lysc_node *)container)) {
+		struct cli_dir * dir = state->dir;
+		int              ret;
+
+		/*
+		 * Create the directory entry related to the list given
+		 * in argument.
+		 */
+		ret = cli_build_child_dir(&dir,
+		                          (const struct lysc_node *)container,
+		                          context);
+		if (ret)
+			return ret;
+
+		/*
+		 * Create and attach a show configuration command to the
+		 * directory just created.
+		 */
+		ret = cli_show_make_config_list_cmd(dir,
+		                                    container,
+		                                    "config",
+		                                    context);
+		if (ret)
+			return ret;
+
+		/*
+		 * Create and attach a show operational state command to
+		 * the directory just created.
+		 */
+		ret = cli_show_make_oper_list_cmd(dir,
+		                                  container,
+		                                  "status",
+		                                  context);
+		if (ret)
+			return ret;
+
+		cli_build_push(builder, cli_build_process_list, dir);
+
+		return CLI_WALK_CONT_RET;
+	}
+	else
+		return CLI_WALK_SKIP_RET;
 }
 
 static int
-cli_build_handle_sublist(struct cli_build_stat *       state,
-                         struct cli_context *          context,
-                         const struct lysc_node_list * list,
-                         enum cli_walk_event           event,
-                         struct cli_build *            builder)
-{
-	cli_assert(state);
-	cli_assert(state->dir);
-	cli_assert_context(context);
-	cli_assert(list);
-	cli_assert(((const struct lysc_node *)list)->nodetype == LYS_LIST);
-	cli_assert(event == CLI_WALK_PRE_EVT);
-	cli_build_assert(builder);
-
-#warning Implement me!!
-	return CLI_WALK_SKIP_RET;
-}
-
-static int
-cli_build_process_toplist(struct cli_build_stat *  state,
-                          struct cli_context *     context,
-                          const struct lysc_node * node,
-                          enum cli_walk_event      event,
-                          struct cli_build *       builder)
+cli_build_process_list(struct cli_build_stat *  state,
+                       struct cli_context *     context,
+                       const struct lysc_node * node,
+                       enum cli_walk_event      event,
+                       struct cli_build *       builder)
 {
 	cli_assert(state);
 	cli_assert_context(context);
@@ -785,24 +725,25 @@ cli_build_process_toplist(struct cli_build_stat *  state,
 
 	switch (node->nodetype) {
 	case LYS_CONTAINER:
-		return cli_build_handle_listcont(
+#warning REMOVE ME and adapt cli_show_make_.*_list_cmd() so that it may cope with list sub containers...
+#if 1
+		cli_lysc_dbg(node,
+		             "'%s' node type not implemented !",
+		             cli_ly_nodetype_str(node->nodetype));
+		break;
+#else
+		return cli_build_handle_list_cont(
 			state,
 			context,
 			(const struct lysc_node_container *)node,
 			event,
 			builder);
-
-	case LYS_LIST:
-		return cli_build_handle_sublist(
-			state,
-			context,
-			(const struct lysc_node_list *)node,
-			event,
-			builder);
+#endif
 
 	case LYS_LEAF:
 		break;
 
+	case LYS_LIST:
 	case LYS_LEAFLIST:
 	case LYS_CHOICE:
 	case LYS_ANYXML:
@@ -989,7 +930,7 @@ cli_build_handle_toplist(struct cli_build_stat *       state __cli_unused,
 		if (ret)
 			return ret;
 
-		cli_build_push(builder, cli_build_process_toplist, dir);
+		cli_build_push(builder, cli_build_process_list, dir);
 
 		return CLI_WALK_CONT_RET;
 	}
